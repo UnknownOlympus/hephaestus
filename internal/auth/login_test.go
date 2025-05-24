@@ -17,7 +17,7 @@ import (
 
 type errorReader struct{}
 
-func (er *errorReader) Read(p []byte) (n int, err error) {
+func (er *errorReader) Read(_ []byte) (int, error) {
 	return 0, errors.New("simulated read error")
 }
 
@@ -25,7 +25,7 @@ func (er *errorReader) Close() error {
 	return nil
 }
 
-// mockRoundTripper helps to imitate errors on transoprt and custom request level
+// mockRoundTripper helps to imitate errors on transoprt and custom request level.
 type mockRoundTripper struct {
 	RoundTripFunc func(req *http.Request) (*http.Response, error)
 }
@@ -54,11 +54,11 @@ func TestLogin(t *testing.T) {
 		{
 			name: "success login",
 			serverHandlerFactory: func(expectedBaseURL string) http.HandlerFunc {
-				return func(w http.ResponseWriter, r *http.Request) {
+				return func(writer http.ResponseWriter, r *http.Request) {
 					// check method
 					if r.Method != http.MethodPost {
 						t.Errorf("Expected POST method, but received %s", r.Method)
-						http.Error(w, "Invalid method", http.StatusMethodNotAllowed)
+						http.Error(writer, "Invalid method", http.StatusMethodNotAllowed)
 						return
 					}
 
@@ -75,7 +75,7 @@ func TestLogin(t *testing.T) {
 
 					// check form data
 					if err := r.ParseForm(); err != nil {
-						http.Error(w, "failed to parse the form", http.StatusBadRequest)
+						http.Error(writer, "failed to parse the form", http.StatusBadRequest)
 						return
 					}
 					if got, want := r.FormValue("action"), "login"; got != want {
@@ -87,8 +87,8 @@ func TestLogin(t *testing.T) {
 					if got, want := r.FormValue("password"), "testpass"; got != want {
 						t.Errorf("Expected password 'testpass', but received '%s'", got)
 					}
-					w.WriteHeader(http.StatusOK)
-					fmt.Println(w, "Login successful")
+					writer.WriteHeader(http.StatusOK)
+					t.Log(writer, "Login successful")
 				}
 			},
 			ctx:      context.Background(),
@@ -110,7 +110,7 @@ func TestLogin(t *testing.T) {
 		{
 			name: "request execution error - client.Do error",
 			clientTransport: &mockRoundTripper{
-				RoundTripFunc: func(req *http.Request) (*http.Response, error) {
+				RoundTripFunc: func(_ *http.Request) (*http.Response, error) {
 					return nil, errors.New("simulated network error")
 				},
 			},
@@ -124,9 +124,9 @@ func TestLogin(t *testing.T) {
 		{
 			name: "failed to login; status code != 200",
 			serverHandlerFactory: func(_ string) http.HandlerFunc {
-				return func(w http.ResponseWriter, r *http.Request) {
+				return func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusUnauthorized)
-					fmt.Println(w, "not authorized")
+					t.Log(w, "not authorized")
 				}
 			},
 			ctx:                   context.Background(),
@@ -140,7 +140,7 @@ func TestLogin(t *testing.T) {
 		{
 			name: "error reading response body",
 			clientTransport: &mockRoundTripper{
-				RoundTripFunc: func(req *http.Request) (*http.Response, error) {
+				RoundTripFunc: func(_ *http.Request) (*http.Response, error) {
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Body:       &errorReader{},
@@ -157,8 +157,8 @@ func TestLogin(t *testing.T) {
 		},
 		{
 			name: "context was canceled before the request was called",
-			serverHandlerFactory: func(baseURL string) http.HandlerFunc {
-				return func(w http.ResponseWriter, r *http.Request) {
+			serverHandlerFactory: func(_ string) http.HandlerFunc {
+				return func(_ http.ResponseWriter, _ *http.Request) {
 					t.Error("The server handler should not be called if the context is canceled before the request")
 				}
 			},
@@ -180,7 +180,10 @@ func TestLogin(t *testing.T) {
 				RoundTripFunc: func(req *http.Request) (*http.Response, error) {
 					select {
 					case <-time.After(100 * time.Millisecond):
-						return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body:       io.NopCloser(strings.NewReader("ok")),
+						}, nil
 					case <-req.Context().Done():
 						return nil, req.Context().Err()
 					}
@@ -248,10 +251,8 @@ func TestLogin(t *testing.T) {
 				if tt.wantErrMsgContains != "" && !strings.Contains(err.Error(), tt.wantErrMsgContains) {
 					t.Errorf("Login() error = %q, expected contains %q", err.Error(), tt.wantErrMsgContains)
 				}
-			} else {
-				if err != nil {
-					t.Fatalf("Login() unexpected error: %v", err)
-				}
+			} else if err != nil {
+				t.Fatalf("Login() unexpected error: %v", err)
 			}
 		})
 	}

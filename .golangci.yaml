@@ -442,3 +442,6 @@ linters:
           - gosec
           - noctx
           - wrapcheck
+          - varnamelen
+          - nestif
+          - gocognit
