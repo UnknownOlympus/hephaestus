@@ -28,7 +28,7 @@ func NewDatabase(host, port, username, password, dbName string) (*pgxpool.Pool, 
 
 	dbHost := net.JoinHostPort(host, port)
 	dbURL := fmt.Sprintf(
-		"postgres://%s:%s@%s/%s",
+		"postgres://%s:%s@%s/%s?sslmode=disable",
 		username,
 		password,
 		dbHost,

@@ -47,11 +47,11 @@ func ParseEmployees(ctx context.Context, client *http.Client, destURL string) ([
 		return nil, fmt.Errorf("%w, received status code: %d", ErrScrapeEmployee, resp.StatusCode)
 	}
 
-	return parseEmployeeFromBody(resp.Body)
+	return ParseEmployeeFromBody(resp.Body)
 }
 
-// parseEmployeeFromBody parses the employee data from the provided io.ReadCloser and returns a slice of models.Employee.
-func parseEmployeeFromBody(in io.ReadCloser) ([]models.Employee, error) {
+// ParseEmployeeFromBody parses the employee data from the provided io.ReadCloser and returns a slice of models.Employee.
+func ParseEmployeeFromBody(in io.ReadCloser) ([]models.Employee, error) {
 	var employees []models.Employee
 
 	doc, err := goquery.NewDocumentFromReader(in)

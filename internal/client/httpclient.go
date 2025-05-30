@@ -12,7 +12,7 @@ func CreateHTTPClient(log *slog.Logger) *http.Client {
 	return &http.Client{
 		Jar: jar,
 		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
-			log.Debug("Redireced to URL", "URL", req.URL)
+			log.Debug("Redirected to URL", "URL", req.URL)
 
 			return nil
 		},
