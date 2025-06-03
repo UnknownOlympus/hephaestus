@@ -30,7 +30,7 @@ func TestSaveLastProcessesDate_Success(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta(query)).WithArgs(timeNow).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	repo := repository.NewStatusRepository(mock)
-	if err = repo.SaveLastProcessedDate(context.Background(), timeNow); err != nil {
+	if err = repo.SaveProcessedDate(context.Background(), timeNow); err != nil {
 		t.Errorf("error was not expected while inserting query: %v", err)
 	}
 
@@ -55,7 +55,7 @@ func TestLastProcessedDate_QueryError(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta(query)).WithArgs(timeNow).WillReturnError(assert.AnError)
 
 	repo := repository.NewStatusRepository(mock)
-	if err = repo.SaveLastProcessedDate(context.Background(), timeNow); err == nil {
+	if err = repo.SaveProcessedDate(context.Background(), timeNow); err == nil {
 		t.Errorf("error was expected, but received nil")
 	}
 

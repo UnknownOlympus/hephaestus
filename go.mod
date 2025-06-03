@@ -9,6 +9,7 @@ require (
 	github.com/pashagolub/pgxmock/v4 v4.7.0
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
+	github.com/tamathecxder/randomail v1.2.0
 	github.com/testcontainers/testcontainers-go v0.37.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
 )

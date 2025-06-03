@@ -12,7 +12,7 @@ type Repository struct {
 }
 
 type StatusRepoIface interface {
-	SaveLastProcessedDate(ctx context.Context, date time.Time) error
+	SaveProcessedDate(ctx context.Context, date time.Time) error
 	GetLastProcessedDate(ctx context.Context) (time.Time, error)
 }
 
@@ -22,11 +22,21 @@ func NewStatusRepository(db Database) StatusRepoIface {
 
 // EmployeeRepoIface represents the interface for interacting with employee data in the repository.
 type EmployeeRepoIface interface {
-	SaveEmployee(ctx context.Context, identifier int, fullname, position, email, phone string) error
-	UpdateEmployee(ctx context.Context, identifier int, fullname, position, email, phone string) error
+	SaveEmployee(ctx context.Context, identifier int, fullname, shortname, position, email, phone string) error
+	UpdateEmployee(ctx context.Context, identifier int, fullname, shortname, position, email, phone string) error
 	GetEmployeeByID(ctx context.Context, identifier int) (models.Employee, error)
 }
 
 func NewEmployeeRepository(db Database) EmployeeRepoIface {
+	return &Repository{db: db}
+}
+
+// TaskRepoIface represents the interface for interacting with task data in the repository
+type TaskRepoIface interface {
+	GetOrCreateTaskTypeID(ctx context.Context, typeName string) (int, error)
+	SaveTaskData(ctx context.Context, task models.Task) error
+}
+
+func NewTaskRepository(db Database) TaskRepoIface {
 	return &Repository{db: db}
 }

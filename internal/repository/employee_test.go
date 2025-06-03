@@ -36,6 +36,7 @@ func TestSaveEmployee_QueryError(t *testing.T) {
 
 	expectedID := 123
 	expectedFullname := "Test User"
+	expectedShortName := "Test U."
 	expectedPosition := "qa"
 	expectedEmail := "test@test.com"
 	expectedPhone := "123456789"
@@ -46,7 +47,7 @@ func TestSaveEmployee_QueryError(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.SaveEmployee(
-		context.Background(), expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
 	if err == nil {
 		t.Error("Error was expected, but got nil.")
 	}
@@ -66,6 +67,7 @@ func TestSaveEmployee_Success(t *testing.T) {
 
 	expectedID := 123
 	expectedFullname := "Test User"
+	expectedShortName := "Test U."
 	expectedPosition := "qa"
 	expectedEmail := "test@test.com"
 	expectedPhone := "123456789"
@@ -76,7 +78,7 @@ func TestSaveEmployee_Success(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.SaveEmployee(
-		context.Background(), expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
 	if err != nil {
 		t.Errorf("Nil was expected, but got error: %s", err.Error())
 	}
@@ -96,6 +98,7 @@ func TestUpdateEmployee_QueryError(t *testing.T) {
 
 	expectedID := 123
 	expectedFullname := "Test User"
+	expectedShortName := "Test U."
 	expectedPosition := "qa"
 	expectedEmail := "test@test.com"
 	expectedPhone := "123456789"
@@ -106,7 +109,7 @@ func TestUpdateEmployee_QueryError(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.UpdateEmployee(
-		context.Background(), expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
 	if err == nil {
 		t.Error("Error was expected, but got nil.")
 	}
@@ -126,6 +129,7 @@ func TestUpdateEmployee_Success(t *testing.T) {
 
 	expectedID := 123
 	expectedFullname := "Test User"
+	expectedShortName := "Test U."
 	expectedPosition := "qa"
 	expectedEmail := "test@test.com"
 	expectedPhone := "123456789"
@@ -136,7 +140,7 @@ func TestUpdateEmployee_Success(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.UpdateEmployee(
-		context.Background(), expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
 	if err != nil {
 		t.Errorf("Nil was expected, but got error: %s", err.Error())
 	}

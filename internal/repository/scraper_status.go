@@ -7,7 +7,7 @@ import (
 )
 
 // SaveLastProcessedDate saves last processed date.
-func (r *Repository) SaveLastProcessedDate(ctx context.Context, date time.Time) error {
+func (r *Repository) SaveProcessedDate(ctx context.Context, date time.Time) error {
 	query := `
 		INSERT INTO scraper_status (last_processed_date)
 		VALUES ($1)

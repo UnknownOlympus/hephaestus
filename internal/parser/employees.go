@@ -16,9 +16,28 @@ import (
 
 var ErrScrapeEmployee = errors.New("failed to scrape employee")
 
+type employeeShortname struct {
+	ID        int
+	Shortname string
+}
+
+func ParseEmployees(ctx context.Context, client *http.Client, destURL string) ([]models.Employee, error) {
+	staff, err := ParseStaff(ctx, client, destURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse staff: %w", err)
+	}
+
+	staffShortName, err := ParseStaffShortNames(ctx, client, destURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse staff short names: %w", err)
+	}
+
+	return UpdateEmployeeShortNames(staff, staffShortName), nil
+}
+
 // ParseEmployees parses employee data from the specified destination URL using the provided HTTP client.
 // It returns a slice of models.Employee and an error if any.
-func ParseEmployees(ctx context.Context, client *http.Client, destURL string) ([]models.Employee, error) {
+func ParseStaff(ctx context.Context, client *http.Client, destURL string) ([]models.Employee, error) {
 	data := url.Values{}
 
 	data.Set("core_section", "staff_unit")
@@ -50,6 +69,62 @@ func ParseEmployees(ctx context.Context, client *http.Client, destURL string) ([
 	return ParseEmployeeFromBody(resp.Body)
 }
 
+func ParseStaffShortNames(ctx context.Context, client *http.Client, destURL string) ([]employeeShortname, error) {
+	data := url.Values{}
+	var employees []employeeShortname
+
+	data.Set("core_section", "staff")
+	data.Set("action", "division")
+
+	resp, err := getHTMLResponse(ctx, client, &data, destURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get response which should retrieve task types: %w", err)
+	}
+	defer resp.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("data cannot be parsed as HTML: %w", err)
+	}
+
+	doc.Find(`div.div_space`).Each(func(i int, div *goquery.Selection) {
+		link := div.Find("a")
+		if link.Length() > 0 {
+			href, exists := link.Attr("href")
+			if exists {
+				id, err := parseIDFromHref(href)
+				if id > 0 && err == nil {
+					employee := employeeShortname{
+						ID:        id,
+						Shortname: strings.TrimSpace(link.Text()),
+					}
+					employees = append(employees, employee)
+				}
+			}
+		}
+	})
+
+	return employees, nil
+}
+
+func UpdateEmployeeShortNames(employees []models.Employee, shortnames []employeeShortname) []models.Employee {
+	shortNameMap := make(map[int]string)
+	for _, sn := range shortnames {
+		shortNameMap[sn.ID] = sn.Shortname
+	}
+
+	updatedEmployees := make([]models.Employee, len(employees))
+	copy(updatedEmployees, employees)
+
+	for i := range updatedEmployees {
+		if shortname, ok := shortNameMap[updatedEmployees[i].ID]; ok {
+			updatedEmployees[i].ShortName = shortname
+		}
+	}
+
+	return updatedEmployees
+}
+
 // ParseEmployeeFromBody parses the employee data from the provided io.ReadCloser and returns a slice of models.Employee.
 func ParseEmployeeFromBody(in io.ReadCloser) ([]models.Employee, error) {
 	var employees []models.Employee
@@ -77,4 +152,22 @@ func ParseEmployeeFromBody(in io.ReadCloser) ([]models.Employee, error) {
 	})
 
 	return employees, nil
+}
+
+func parseIDFromHref(href string) (int, error) {
+	parts := strings.Split(href, "&")
+	for _, part := range parts {
+		if strings.HasPrefix(part, "id=") {
+			var identifier int
+
+			_, err := fmt.Sscanf(part, "id=%d", &identifier)
+			if err != nil {
+				return 0, fmt.Errorf("failed to scan the string '%s':%w", part, err)
+			}
+
+			return identifier, nil
+		}
+	}
+
+	return 0, nil
 }

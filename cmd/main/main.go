@@ -10,6 +10,7 @@ import (
 	"github.com/Houeta/us-api-provider/internal/config"
 	"github.com/Houeta/us-api-provider/internal/repository"
 	"github.com/Houeta/us-api-provider/internal/services/employees"
+	"github.com/Houeta/us-api-provider/internal/services/tasks"
 )
 
 const (
@@ -34,10 +35,17 @@ func main() {
 	defer dtb.Close()
 
 	employeeRepo := repository.NewEmployeeRepository(dtb)
+	taskRepo := repository.NewTaskRepository(dtb)
+	statRepo := repository.NewStatusRepository(dtb)
 
 	staff := employees.NewStaff(logger, employeeRepo)
 	if err = staff.Run(cfg.Userside.LoginURL, cfg.Userside.BaseURL, cfg.Userside.Username, cfg.Userside.Password); err != nil {
 		logger.Error("Failed to run employee parser", "op", "main.main", "division", "employee", "error", err)
+	}
+
+	taskService := tasks.NewTaskService(logger, taskRepo, statRepo)
+	if _, err = taskService.Run(cfg.Userside.LoginURL, cfg.Userside.BaseURL, cfg.Userside.Username, cfg.Userside.Password); err != nil {
+		logger.Error("Failed to run task parser", "op", "main.main", "division", "employee", "error", err)
 	}
 
 	waitForShutdown(logger)

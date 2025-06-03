@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tamathecxder/randomail"
+
 	"github.com/Houeta/us-api-provider/internal/auth"
 	"github.com/Houeta/us-api-provider/internal/client"
 	"github.com/Houeta/us-api-provider/internal/models"
@@ -52,16 +54,17 @@ func (s *Staff) Run(loginURL, baseURL, username, password string) error {
 
 	for _, employee := range employees {
 		if employee.Email == "" {
-			log.InfoContext(ctx, "Email was not specified, skip", "employee", employee.FullName)
+			log.DebugContext(ctx, "Email was not specified, generate random email", "employee", employee.FullName)
 			missCounter++
-			continue
+			employee.Email = randomail.GenerateRandomEmail()
 		}
 
 		isEmail, _ := ValidateEmployee(employee.Email, employee.Phone)
 		if !isEmail {
-			log.InfoContext(ctx, "Employee has invalid email, he will be skipped.",
+			log.InfoContext(ctx, "Employee has invalid email, it will be replaced with temporary random email.",
 				"fullname", employee.FullName, "email", employee.Email)
-			continue
+			missCounter++
+			employee.Email = randomail.GenerateRandomEmail()
 		}
 		existed, existedEmployee := IsEmployeeExists(ctx, employee.ID, s.repo)
 		if existed {
@@ -73,6 +76,7 @@ func (s *Staff) Run(loginURL, baseURL, username, password string) error {
 				ctx,
 				employee.ID,
 				employee.FullName,
+				employee.ShortName,
 				employee.Position,
 				employee.Email,
 				employee.Phone,
@@ -81,7 +85,7 @@ func (s *Staff) Run(loginURL, baseURL, username, password string) error {
 				return fmt.Errorf("failed to update employee %s: %w", employee.FullName, updateErr)
 			}
 		} else {
-			saveErr := s.repo.SaveEmployee(ctx, employee.ID, employee.FullName, employee.Position, employee.Email, employee.Phone)
+			saveErr := s.repo.SaveEmployee(ctx, employee.ID, employee.FullName, employee.ShortName, employee.Position, employee.Email, employee.Phone)
 			if saveErr != nil {
 				return fmt.Errorf("failed to save new employee %s: %w", employee.FullName, saveErr)
 			}
@@ -109,7 +113,7 @@ func (s *Staff) GetEmployees(ctx context.Context, loginURL, baseURL, username, p
 		slog.String("division", "employee"),
 	)
 
-	log.InfoContext(ctx, "Logging in", "url", baseURL)
+	log.InfoContext(ctx, "Attempting login", "url", baseURL)
 
 	httpClient := client.CreateHTTPClient(s.log)
 	err := auth.Login(ctx, httpClient, loginURL, baseURL, username, password)

@@ -42,17 +42,17 @@ func (_m *EmployeeRepoIface) GetEmployeeByID(ctx context.Context, identifier int
 	return r0, r1
 }
 
-// SaveEmployee provides a mock function with given fields: ctx, identifier, fullname, position, email, phone
-func (_m *EmployeeRepoIface) SaveEmployee(ctx context.Context, identifier int, fullname string, position string, email string, phone string) error {
-	ret := _m.Called(ctx, identifier, fullname, position, email, phone)
+// SaveEmployee provides a mock function with given fields: ctx, identifier, fullname, shortname, position, email, phone
+func (_m *EmployeeRepoIface) SaveEmployee(ctx context.Context, identifier int, fullname string, shortname string, position string, email string, phone string) error {
+	ret := _m.Called(ctx, identifier, fullname, shortname, position, email, phone)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SaveEmployee")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, int, string, string, string, string) error); ok {
-		r0 = rf(ctx, identifier, fullname, position, email, phone)
+	if rf, ok := ret.Get(0).(func(context.Context, int, string, string, string, string, string) error); ok {
+		r0 = rf(ctx, identifier, fullname, shortname, position, email, phone)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -60,17 +60,17 @@ func (_m *EmployeeRepoIface) SaveEmployee(ctx context.Context, identifier int, f
 	return r0
 }
 
-// UpdateEmployee provides a mock function with given fields: ctx, identifier, fullname, position, email, phone
-func (_m *EmployeeRepoIface) UpdateEmployee(ctx context.Context, identifier int, fullname string, position string, email string, phone string) error {
-	ret := _m.Called(ctx, identifier, fullname, position, email, phone)
+// UpdateEmployee provides a mock function with given fields: ctx, identifier, fullname, shortname, position, email, phone
+func (_m *EmployeeRepoIface) UpdateEmployee(ctx context.Context, identifier int, fullname string, shortname string, position string, email string, phone string) error {
+	ret := _m.Called(ctx, identifier, fullname, shortname, position, email, phone)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateEmployee")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, int, string, string, string, string) error); ok {
-		r0 = rf(ctx, identifier, fullname, position, email, phone)
+	if rf, ok := ret.Get(0).(func(context.Context, int, string, string, string, string, string) error); ok {
+		r0 = rf(ctx, identifier, fullname, shortname, position, email, phone)
 	} else {
 		r0 = ret.Error(0)
 	}
