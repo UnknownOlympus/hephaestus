@@ -78,6 +78,7 @@ const (
 )
 
 func TestParseEmployees_Success(t *testing.T) {
+	t.Parallel()
 	// Create mock http server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := r.ParseForm()
@@ -150,8 +151,10 @@ func TestParseEmployees_Success(t *testing.T) {
 }
 
 func TestParseEmployees_Failures(t *testing.T) {
+	t.Parallel()
 	// Scenario 1: Error getting active employees
 	t.Run("fail on parse staff", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -165,6 +168,7 @@ func TestParseEmployees_Failures(t *testing.T) {
 
 	// Scenario 2: Error getting terminated employees
 	t.Run("fail on parse dismissed staff", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			err := r.ParseForm()
 			assert.NoError(t, err)
@@ -185,6 +189,7 @@ func TestParseEmployees_Failures(t *testing.T) {
 
 	// Scenario 3: Error getting short names
 	t.Run("fail on parse short names", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			err := r.ParseForm()
 			assert.NoError(t, err)
@@ -208,6 +213,7 @@ func TestParseEmployees_Failures(t *testing.T) {
 	})
 
 	t.Run("fail on parse ID from href", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			err := r.ParseForm()
 			assert.NoError(t, err)
@@ -232,7 +238,9 @@ func TestParseEmployees_Failures(t *testing.T) {
 }
 
 func TestParseEmployeeFromBody(t *testing.T) {
+	t.Parallel()
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		reader := io.NopCloser(strings.NewReader(staffHTML))
 		employees, err := parser.ParseEmployeeFromBody(reader, 2, 3, 4, 5, 6)
 
@@ -243,6 +251,7 @@ func TestParseEmployeeFromBody(t *testing.T) {
 	})
 
 	t.Run("no rows with matching tag", func(t *testing.T) {
+		t.Parallel()
 		htmlContent := `<table><tr><td>No rows with tag attribute</td></tr></table>`
 		reader := io.NopCloser(strings.NewReader(htmlContent))
 		employees, err := parser.ParseEmployeeFromBody(reader, 1, 2, 3, 4, 5)
@@ -260,6 +269,8 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestParseEmployees_HTTPRequestError(t *testing.T) {
+	t.Parallel()
+
 	// Create client which always returning error
 	client := &http.Client{
 		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
@@ -279,6 +290,7 @@ func TestParseEmployees_HTTPRequestError(t *testing.T) {
 }
 
 func TestParseEmployees_InvalidURL(t *testing.T) {
+	t.Parallel()
 	client := &http.Client{}
 	ctx := context.Background()
 

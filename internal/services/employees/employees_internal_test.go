@@ -16,14 +16,40 @@ import (
 )
 
 func TestProcessEmployeeInternal(t *testing.T) {
+	t.Parallel()
 	// --- Test Cases Setup ---
-	employeeToUpdate := models.Employee{ID: 101, FullName: "John Doe", Position: "Developer", Email: "john.doe@example.com", Phone: "+1234567890"}
-	existingEmployeeInDB := models.Employee{ID: 101, FullName: "Johnny Doe", Position: "Old Position", Email: "old@email.com", Phone: "+111"}
-	employeeToSkip := models.Employee{ID: 102, FullName: "Jane Smith", Position: "Manager", Email: "jane.smith@example.com", Phone: "+0987654321"}
-	employeeToSave := models.Employee{ID: 103, FullName: "Sam Brown", Position: "Designer", Email: "sam.brown@example.com", Phone: "+555444333"}
+	employeeToUpdate := models.Employee{
+		ID:       101,
+		FullName: "John Doe",
+		Position: "Developer",
+		Email:    "john.doe@example.com",
+		Phone:    "+1234567890",
+	}
+	existingEmployeeInDB := models.Employee{
+		ID:       101,
+		FullName: "Johnny Doe",
+		Position: "Old Position",
+		Email:    "old@email.com",
+		Phone:    "+111",
+	}
+	employeeToSkip := models.Employee{
+		ID:       102,
+		FullName: "Jane Smith",
+		Position: "Manager",
+		Email:    "jane.smith@example.com",
+		Phone:    "+0987654321",
+	}
+	employeeToSave := models.Employee{
+		ID:       103,
+		FullName: "Sam Brown",
+		Position: "Designer",
+		Email:    "sam.brown@example.com",
+		Phone:    "+555444333",
+	}
 	parsedEmployees := []models.Employee{employeeToUpdate, employeeToSkip, employeeToSave}
 
 	t.Run("success - update, skip, and save", func(t *testing.T) {
+		t.Parallel()
 		// --- Mocks Setup ---
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
@@ -36,7 +62,8 @@ func TestProcessEmployeeInternal(t *testing.T) {
 
 		repoMock.On("GetEmployeeByID", mock.Anything, employeeToUpdate.ID).Return(existingEmployeeInDB, nil)
 		repoMock.On("UpdateEmployee", mock.Anything, employeeToUpdate.ID, employeeToUpdate.FullName, employeeToUpdate.ShortName,
-			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).Return(nil)
+			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).
+			Return(nil)
 
 		repoMock.On("GetEmployeeByID", mock.Anything, employeeToSkip.ID).Return(employeeToSkip, nil)
 
@@ -54,6 +81,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 	})
 
 	t.Run("failure on parse", func(t *testing.T) {
+		t.Parallel()
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
@@ -66,11 +94,12 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		err := staffService.processEmployeeInternal(ctx, parserMock)
 
 		require.Error(t, err)
-		assert.ErrorIs(t, err, parseError)
+		require.ErrorIs(t, err, parseError)
 		repoMock.AssertNotCalled(t, "GetEmployeeByID", mock.Anything, mock.Anything)
 	})
 
 	t.Run("failure on update", func(t *testing.T) {
+		t.Parallel()
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
@@ -81,18 +110,20 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
 		repoMock.On("GetEmployeeByID", mock.Anything, employeeToUpdate.ID).Return(existingEmployeeInDB, nil)
 		repoMock.On("UpdateEmployee", mock.Anything, employeeToUpdate.ID, employeeToUpdate.FullName, employeeToUpdate.ShortName,
-			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).Return(updateError)
+			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).
+			Return(updateError)
 
 		err := staffService.processEmployeeInternal(ctx, parserMock)
 
 		require.Error(t, err)
-		assert.ErrorIs(t, err, updateError)
+		require.ErrorIs(t, err, updateError)
 		parserMock.AssertExpectations(t)
 		repoMock.AssertExpectations(t)
 		repoMock.AssertNotCalled(t, "SaveEmployee")
 	})
 
 	t.Run("failure on save", func(t *testing.T) {
+		t.Parallel()
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
@@ -103,7 +134,8 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
 		repoMock.On("GetEmployeeByID", mock.Anything, employeeToUpdate.ID).Return(existingEmployeeInDB, nil)
 		repoMock.On("UpdateEmployee", mock.Anything, employeeToUpdate.ID, employeeToUpdate.FullName, employeeToUpdate.ShortName,
-			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).Return(nil)
+			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).
+			Return(nil)
 		repoMock.On("GetEmployeeByID", mock.Anything, employeeToSkip.ID).Return(employeeToSkip, nil)
 		repoMock.On("GetEmployeeByID", mock.Anything, employeeToSave.ID).Return(models.Employee{}, sql.ErrNoRows)
 		repoMock.On("SaveEmployee", mock.Anything, employeeToSave.ID, employeeToSave.FullName, employeeToSave.ShortName,
@@ -112,17 +144,19 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		err := staffService.processEmployeeInternal(ctx, parserMock)
 
 		require.Error(t, err)
-		assert.ErrorIs(t, err, saveError)
+		require.ErrorIs(t, err, saveError)
 		parserMock.AssertExpectations(t)
 		repoMock.AssertExpectations(t)
 	})
 }
 
 func TestFixInvalidEmail(t *testing.T) {
+	t.Parallel()
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	ctx := context.Background()
 
 	t.Run("all emails are valid", func(t *testing.T) {
+		t.Parallel()
 		employeesList := []models.Employee{
 			{FullName: "Valid User", Email: "valid@example.com"},
 		}
@@ -131,6 +165,7 @@ func TestFixInvalidEmail(t *testing.T) {
 	})
 
 	t.Run("email is empty", func(t *testing.T) {
+		t.Parallel()
 		employeesList := []models.Employee{
 			{FullName: "Empty Email User", Email: ""},
 		}
@@ -141,6 +176,7 @@ func TestFixInvalidEmail(t *testing.T) {
 	})
 
 	t.Run("invalid email", func(t *testing.T) {
+		t.Parallel()
 		employeeList := []models.Employee{
 			{FullName: "Invalid User", Email: "invalid.email@com"},
 		}
@@ -164,6 +200,7 @@ func TestIsEmployeeExists(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("exists", func(t *testing.T) {
+		t.Parallel()
 		expectedEmployee := models.Employee{ID: 123, FullName: "testuser"}
 		mockRepo := new(mocks.EmployeeRepoIface)
 		mockRepo.On("GetEmployeeByID", ctx, 123).Return(expectedEmployee, nil)
@@ -174,6 +211,7 @@ func TestIsEmployeeExists(t *testing.T) {
 	})
 
 	t.Run("does not exist", func(t *testing.T) {
+		t.Parallel()
 		mockRepo := new(mocks.EmployeeRepoIface)
 		mockRepo.On("GetEmployeeByID", ctx, 123).Return(models.Employee{}, sql.ErrNoRows)
 		ok, employee := IsEmployeeExists(ctx, 123, mockRepo)
@@ -183,6 +221,7 @@ func TestIsEmployeeExists(t *testing.T) {
 	})
 
 	t.Run("sql error", func(t *testing.T) {
+		t.Parallel()
 		mockRepo := new(mocks.EmployeeRepoIface)
 		mockRepo.On("GetEmployeeByID", ctx, 123).Return(models.Employee{}, sql.ErrConnDone)
 		ok, employee := IsEmployeeExists(ctx, 123, mockRepo)
@@ -207,6 +246,7 @@ func TestValidateEmployee(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			isEmail, isPhone := ValidateEmployee(tc.email, tc.phone)
 			assert.Equal(t, tc.expectEmail, isEmail)
 			assert.Equal(t, tc.expectPhone, isPhone)

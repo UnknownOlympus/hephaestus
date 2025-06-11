@@ -68,6 +68,8 @@ const taskTypesHTML = `
 
 // TestParseTasksByDate checks the main function of getting tasks.
 func TestParseTasksByDate(t *testing.T) {
+	t.Parallel()
+
 	// We create a mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Checking whether the request contains the expected parameters
@@ -116,6 +118,8 @@ func TestParseTasksByDate(t *testing.T) {
 
 // TestParseTaskTypes checks for receipt of task types.
 func TestParseTaskTypes(t *testing.T) {
+	t.Parallel()
+
 	requestCount := 0
 	// mock-server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +145,8 @@ func TestParseTaskTypes(t *testing.T) {
 
 // unit-test for parseExecutors.
 func TestParseExecutors(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		rawHTML  string
@@ -170,6 +176,7 @@ func TestParseExecutors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tc.expected, parser.ParseExecutors(tc.rawHTML))
 		})
 	}
@@ -177,9 +184,12 @@ func TestParseExecutors(t *testing.T) {
 
 // unit-test fot parseCustomerInfo.
 func TestParseCustomerInfo(t *testing.T) {
+	t.Parallel()
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	t.Run("Name and login", func(t *testing.T) {
+		t.Parallel()
 		html := `<a href="#">Test client - client123</a>`
 		name, login := parser.ParseCustomerInfo(html, logger)
 		assert.Equal(t, "Test client", name)
@@ -187,6 +197,7 @@ func TestParseCustomerInfo(t *testing.T) {
 	})
 
 	t.Run("Only name", func(t *testing.T) {
+		t.Parallel()
 		html := `Just client`
 		name, login := parser.ParseCustomerInfo(html, logger)
 		assert.Equal(t, "Just client", name)
@@ -194,6 +205,7 @@ func TestParseCustomerInfo(t *testing.T) {
 	})
 
 	t.Run("Empty row", func(t *testing.T) {
+		t.Parallel()
 		html := ``
 		name, login := parser.ParseCustomerInfo(html, logger)
 		assert.Empty(t, name)
@@ -202,6 +214,8 @@ func TestParseCustomerInfo(t *testing.T) {
 }
 
 func TestParseTasksbyDate_ResponseError(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -217,6 +231,8 @@ func TestParseTasksbyDate_ResponseError(t *testing.T) {
 }
 
 func TestParseTaskTypes_ResponseError(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))

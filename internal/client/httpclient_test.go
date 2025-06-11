@@ -12,6 +12,8 @@ import (
 )
 
 func TestCreateHTTPClient(t *testing.T) {
+	t.Parallel()
+
 	var logBuf bytes.Buffer // buffer for log capturing
 	// Create slog.Logger, which writes in logBuf
 	testLogger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{
@@ -19,6 +21,7 @@ func TestCreateHTTPClient(t *testing.T) {
 	}))
 
 	t.Run("client properties", func(t *testing.T) {
+		t.Parallel()
 		client := client.CreateHTTPClient(testLogger) // Call function which testing
 
 		if client.Jar == nil {
@@ -31,6 +34,7 @@ func TestCreateHTTPClient(t *testing.T) {
 	})
 
 	t.Run("CheckRedirect behavior - redirection and logging", func(t *testing.T) {
+		t.Parallel()
 		logBuf.Reset() // Clearing the log buffer before this particular test
 
 		finalPath := "/final-destination"

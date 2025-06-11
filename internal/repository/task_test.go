@@ -15,9 +15,11 @@ import (
 
 // TestGetOrCreateTaskTypeID checks the logic for getting or creating a task type ID.
 func TestGetOrCreateTaskTypeID(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	t.Run("success - type exists", func(t *testing.T) {
+		t.Parallel()
 		// Creating a mock for the database
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
@@ -43,6 +45,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 	})
 
 	t.Run("success - type does not exist", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -75,6 +78,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 	})
 
 	t.Run("failure - db error on select", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -94,6 +98,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 	})
 
 	t.Run("failure - insert error", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -119,6 +124,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 	})
 
 	t.Run("failure - 2nd select error", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -151,11 +157,13 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 
 // TestUpsertTask checks the logic of the insert or update task.
 func TestUpsertTask(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	task := models.Task{ID: 101, Description: "Test Description"}
 	typeID := 5
 
 	t.Run("success - update existing task", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -178,6 +186,7 @@ func TestUpsertTask(t *testing.T) {
 	})
 
 	t.Run("failure - check if existence error", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -195,6 +204,7 @@ func TestUpsertTask(t *testing.T) {
 	})
 
 	t.Run("failure - update error", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -216,6 +226,7 @@ func TestUpsertTask(t *testing.T) {
 	})
 
 	t.Run("success - insert new task", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -239,6 +250,7 @@ func TestUpsertTask(t *testing.T) {
 	})
 
 	t.Run("failure - insert new task", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -263,11 +275,13 @@ func TestUpsertTask(t *testing.T) {
 
 // TestUpdateTaskExecutors checks for updates to task executors.
 func TestUpdateTaskExecutors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	taskID := 101
 	executors := []string{"Executor1", "Executor2"}
 
 	t.Run("success - update executors", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -294,6 +308,7 @@ func TestUpdateTaskExecutors(t *testing.T) {
 	})
 
 	t.Run("failure - on insert", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -319,6 +334,7 @@ func TestUpdateTaskExecutors(t *testing.T) {
 	})
 
 	t.Run("failure - on delete", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -341,6 +357,7 @@ func TestUpdateTaskExecutors(t *testing.T) {
 // TestSaveTaskData checks the overall task save logic
 // This test checks the correct orchestration of other method calls.
 func TestSaveTaskData(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	task := models.Task{
 		ID:        101,
@@ -350,6 +367,7 @@ func TestSaveTaskData(t *testing.T) {
 	typeID := 10
 
 	t.Run("success - full flow", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -385,6 +403,7 @@ func TestSaveTaskData(t *testing.T) {
 	})
 
 	t.Run("failure - on GetOrCreateTaskTypeID", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -404,6 +423,7 @@ func TestSaveTaskData(t *testing.T) {
 	})
 
 	t.Run("failure - on UpsertTask", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()
@@ -426,6 +446,7 @@ func TestSaveTaskData(t *testing.T) {
 	})
 
 	t.Run("failure - on UpdateTaskExecutors", func(t *testing.T) {
+		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
 		defer mock.Close()

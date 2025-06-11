@@ -14,6 +14,7 @@ import (
 )
 
 func TestNewDatabase_Success(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode.")
 	}
@@ -68,6 +69,7 @@ func TestNewDatabase_Success(t *testing.T) {
 }
 
 func TestNewDatabase_ParseConfigError(t *testing.T) {
+	t.Parallel()
 	dbpool, err := repository.NewDatabase("localhost", "invalid-port", "user", "pass", "db")
 
 	require.Error(t, err, "Expected an error for invalid database URL, but got nil")
@@ -79,6 +81,7 @@ func TestNewDatabase_ParseConfigError(t *testing.T) {
 }
 
 func TestNewDatabase_ConnectionError(t *testing.T) {
+	t.Parallel()
 	dbpool, err := repository.NewDatabase("nonexistent-host", "5432", "user", "pass", "db")
 
 	require.Error(t, err, "Expected an error for connection failure, but got nil")

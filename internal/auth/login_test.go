@@ -41,6 +41,7 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func TestLogin(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name                  string
 		serverHandlerFactory  func(baseURL string) http.HandlerFunc
@@ -210,6 +211,7 @@ func TestLogin(t *testing.T) {
 	// Run tests
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var testServer *httptest.Server
 			actualLoginURL := "http://dummy.example.com/login"
 
@@ -262,6 +264,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestRetryLogin_Success(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
 		t.Log(writer, "Login successful")
@@ -275,6 +278,7 @@ func TestRetryLogin_Success(t *testing.T) {
 }
 
 func TestRetryLogin_Error(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode.")
 	}
