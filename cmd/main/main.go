@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Houeta/us-api-provider/internal/config"
 	"github.com/Houeta/us-api-provider/internal/repository"
@@ -22,6 +25,11 @@ const (
 // main is the entry point of the application.
 func main() {
 	var err error
+	var wgr sync.WaitGroup
+	delta := 2
+	serviceDealyInSeconds := 3
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
 	cfg := config.MustLoad()
 
@@ -32,24 +40,44 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
+	defer stop()
 	defer dtb.Close()
 
 	employeeRepo := repository.NewEmployeeRepository(dtb)
 	taskRepo := repository.NewTaskRepository(dtb)
 	statRepo := repository.NewStatusRepository(dtb)
-
 	staff := employees.NewStaff(logger, employeeRepo)
-	if err = staff.Run(cfg.Userside.LoginURL, cfg.Userside.BaseURL, cfg.Userside.Username, cfg.Userside.Password); err != nil {
-		logger.Error("Failed to run employee parser", "op", "main.main", "division", "employee", "error", err)
-	}
-
 	taskService := tasks.NewTaskService(logger, taskRepo, statRepo)
-	if _, err = taskService.Run(cfg.Userside.LoginURL, cfg.Userside.BaseURL, cfg.Userside.Username, cfg.Userside.Password); err != nil {
-		logger.Error("Failed to run task parser", "op", "main.main", "division", "employee", "error", err)
-	}
 
-	waitForShutdown(logger)
-	logger.Info("Shutting down gracefully...")
+	wgr.Add(delta)
+
+	go func() {
+		defer wgr.Done()
+		logger.InfoContext(ctx, "Starting Employee Service")
+		if err = staff.Start(ctx, cfg.Userside.LoginURL, cfg.Userside.BaseURL, cfg.Userside.Username,
+			cfg.Userside.Password, cfg.Userside.Interval); err != nil {
+			logger.ErrorContext(ctx, "Employee Service failed", "error", err)
+		}
+		logger.InfoContext(ctx, "Employee Service stopped.")
+	}()
+
+	time.Sleep(time.Duration(serviceDealyInSeconds) * time.Second)
+
+	go func() {
+		defer wgr.Done()
+		logger.InfoContext(ctx, "Starting Task Service")
+		if err = taskService.Start(ctx, cfg.Userside.LoginURL, cfg.Userside.BaseURL, cfg.Userside.Username,
+			cfg.Userside.Password, cfg.Userside.Interval); err != nil {
+			logger.ErrorContext(ctx, "Task Service failed", "error", err)
+		}
+		logger.InfoContext(ctx, "Task Service stopped.")
+	}()
+
+	logger.InfoContext(ctx, "Application started. Press Ctrl+C to stop.")
+
+	wgr.Wait()
+
+	logger.InfoContext(ctx, "Application stopped gracefully...")
 }
 
 // setupLogger initializes and returns a logger based on the environment provided.
@@ -110,15 +138,4 @@ func setupLogger(env string) *slog.Logger {
 	}
 
 	return log
-}
-
-// waitForShutdown blocks the program execution until a termination signal is received from the operating system.
-func waitForShutdown(log *slog.Logger) {
-	// Create a channel to receive OS signals
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	// Block until a signal is received
-	<-stop
-	log.Info("Received SIGTERM signal")
 }

@@ -21,59 +21,92 @@ import (
 )
 
 type Staff struct {
-	log  *slog.Logger
-	repo repository.EmployeeRepoIface
+	log    *slog.Logger
+	repo   repository.EmployeeRepoIface
+	parser parser.EmployeeParserIface
 }
 
 func NewStaff(log *slog.Logger, repo repository.EmployeeRepoIface) *Staff {
 	return &Staff{log: log, repo: repo}
 }
 
-// Run executes the staff service logic by fetching employees, validating their email addresses,
-// and either updating existing employees or saving new ones to the repository.
-func (s *Staff) Run(loginURL, baseURL, username, password string) error {
-	const opn = "Staff.Run"
-
-	var missCounter int
-	ctxTimeout := 5
-
-	log := s.log.With(
+func (s *Staff) initLogger(opn string) *slog.Logger {
+	return s.log.With(
 		slog.String("op", opn),
 		slog.String("division", "employee"),
 	)
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(ctxTimeout*int(time.Second)))
-	defer cancel()
+// Start executes the staff service logic by fetching employees, validating their email addresses,
+// and either updating existing employees or saving new ones to the repository.
+func (s *Staff) Start(ctx context.Context, loginURL, baseURL, username, password string, interval time.Duration) error {
+	const opn = "Employee.Start"
+	log := s.initLogger(opn)
 
-	log.InfoContext(ctx, "Starting the service")
+	var err error
 
-	employees, err := s.GetEmployees(ctx, loginURL, baseURL, username, password)
-	if err != nil {
-		return fmt.Errorf("failed to get employees: %w", err)
+	httpClient := client.CreateHTTPClient(log)
+	s.parser = parser.NewEmployeeParser(httpClient, baseURL)
+
+	// 1. Login
+	log.InfoContext(ctx, "Attempting login...")
+	if err = auth.RetryLogin(ctx, log, httpClient, loginURL, baseURL, username, password); err != nil {
+		return fmt.Errorf("failed to login: %w", err)
+	}
+	log.InfoContext(ctx, "Login  successful.")
+
+	// 2. Catch-up mode
+	log.InfoContext(ctx, "Starting catch-up mode")
+	if err = s.ProcessEmployee(ctx); err != nil {
+		return fmt.Errorf("failed during catch-up process: %w", err)
 	}
 
-	for _, employee := range employees {
-		if employee.Email == "" {
-			log.DebugContext(ctx, "Email was not specified, generate random email", "employee", employee.FullName)
-			missCounter++
-			employee.Email = randomail.GenerateRandomEmail()
-		}
+	// 3. Maintainance mode
+	log.InfoContext(ctx, "Starting maintainance mode", "interval", interval.String())
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
-		isEmail, _ := ValidateEmployee(employee.Email, employee.Phone)
-		if !isEmail {
-			log.InfoContext(ctx, "Employee has invalid email, it will be replaced with temporary random email.",
-				"fullname", employee.FullName, "email", employee.Email)
-			missCounter++
-			employee.Email = randomail.GenerateRandomEmail()
+	for {
+		select {
+		case <-ticker.C:
+			log.InfoContext(ctx, "Periodic check triggered.")
+			if err = s.ProcessEmployee(ctx); err != nil {
+				log.ErrorContext(ctx, "Periodic run failed", "error", err)
+			}
+		case <-ctx.Done():
+			log.InfoContext(ctx, "Service shutting down.")
+			return nil
 		}
+	}
+}
+
+func (s *Staff) ProcessEmployee(ctx context.Context) error {
+	return s.processEmployeeInternal(ctx, s.parser)
+}
+
+func (s *Staff) processEmployeeInternal(pctx context.Context, employeeParser parser.EmployeeParserIface) error {
+	const opn = "Employee.ProcessEmployee"
+	log := s.initLogger(opn)
+
+	contextTimeout := 10
+	ctx, cancel := context.WithTimeout(pctx, time.Duration(contextTimeout)*time.Second)
+	defer cancel()
+
+	employees, err := employeeParser.ParseEmployees(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to parse employee from HTML: %w", err)
+	}
+
+	fixedEmployees := fixInvalidEmail(ctx, log, employees)
+
+	for _, employee := range fixedEmployees {
 		existed, existedEmployee := IsEmployeeExists(ctx, employee.ID, s.repo)
 		if existed {
 			if existedEmployee == employee {
-				log.DebugContext(ctx, "employee is existed, skipping", "fullname", employee.FullName)
+				log.DebugContext(ctx, "employee is existed, skipped", "fullname", employee.FullName)
 				continue
 			}
-			updateErr := s.repo.UpdateEmployee(
-				ctx,
+			updateErr := s.repo.UpdateEmployee(ctx,
 				employee.ID,
 				employee.FullName,
 				employee.ShortName,
@@ -82,52 +115,50 @@ func (s *Staff) Run(loginURL, baseURL, username, password string) error {
 				employee.Phone,
 			)
 			if updateErr != nil {
-				return fmt.Errorf("failed to update employee %s: %w", employee.FullName, updateErr)
+				return fmt.Errorf("failed to update employee: '%s': %w", employee.FullName, updateErr)
 			}
 		} else {
-			saveErr := s.repo.SaveEmployee(ctx, employee.ID, employee.FullName, employee.ShortName, employee.Position, employee.Email, employee.Phone)
+			saveErr := s.repo.SaveEmployee(ctx, employee.ID, employee.FullName, employee.ShortName,
+				employee.Position, employee.Email, employee.Phone)
 			if saveErr != nil {
 				return fmt.Errorf("failed to save new employee %s: %w", employee.FullName, saveErr)
 			}
 		}
 	}
 
-	log.WarnContext(
-		ctx,
-		"Number of employees with no or invalid email addresses. For more information, enable debug mode.",
-		"value",
-		missCounter,
-	)
-
 	return nil
 }
 
-// GetEmployees retrieves a list of employees from the specified base URL using the provided login credentials.
-func (s *Staff) GetEmployees(ctx context.Context, loginURL, baseURL, username, password string,
-) ([]models.Employee, error) {
-	const op = "Staff.GetEmployees"
-	const retryTimeout = 5 * time.Second
+func fixInvalidEmail(ctx context.Context, log *slog.Logger, employees []models.Employee) []models.Employee {
+	var invalidCounter int
+	fixedEmployees := make([]models.Employee, 0, len(employees))
 
-	log := s.log.With(
-		slog.String("op", op),
-		slog.String("division", "employee"),
-	)
+	for _, employee := range employees {
+		if employee.Email == "" {
+			log.DebugContext(ctx, "Email was not specified, generate random email", "employee", employee.FullName)
+			employee.Email = randomail.GenerateRandomEmail()
+			invalidCounter++
+		}
 
-	log.InfoContext(ctx, "Attempting login", "url", baseURL)
+		isEmail, _ := ValidateEmployee(employee.Email, employee.Phone)
+		if !isEmail {
+			log.InfoContext(ctx, "Employee has invalid email, it will be replaced with temporary random email.",
+				"fullname", employee.FullName, "email", employee.Email,
+			)
+			employee.Email = randomail.GenerateRandomEmail()
+			invalidCounter++
+		}
 
-	httpClient := client.CreateHTTPClient(s.log)
-	err := auth.Login(ctx, httpClient, loginURL, baseURL, username, password)
-	if err != nil {
-		log.ErrorContext(ctx, "Failed to login", "error", err.Error())
-		time.Sleep(retryTimeout)
+		fixedEmployees = append(fixedEmployees, employee)
 	}
 
-	employees, err := parser.ParseEmployees(ctx, httpClient, baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse from %s: %w", baseURL, err)
+	if invalidCounter != 0 {
+		log.WarnContext(
+			ctx, "Number of employees with no or invalid email addressess. For mode information, enable debug mode",
+			"value", invalidCounter)
 	}
 
-	return employees, nil
+	return fixedEmployees
 }
 
 // ValidateEmployee validates the email and phone number of an employee.

@@ -9,7 +9,11 @@ import (
 
 // SaveEmployee saves an employee to the database. It inserts a new record with the provided details
 // unless an employee with the same identifier already exists.
-func (r *Repository) SaveEmployee(ctx context.Context, identifier int, fullname, shortname, position, email, phone string) error {
+func (r *Repository) SaveEmployee(
+	ctx context.Context,
+	identifier int,
+	fullname, shortname, position, email, phone string,
+) error {
 	query := `
 		INSERT INTO employees (id, fullname, shortname, position, email, phone)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -25,7 +29,10 @@ func (r *Repository) SaveEmployee(ctx context.Context, identifier int, fullname,
 }
 
 // UpdateEmployee updates an employee's information in the database.
-func (r *Repository) UpdateEmployee(ctx context.Context, identifier int, fullname, shortname, position, email, phone string,
+func (r *Repository) UpdateEmployee(
+	ctx context.Context,
+	identifier int,
+	fullname, shortname, position, email, phone string,
 ) error {
 	query := `
 		UPDATE employees

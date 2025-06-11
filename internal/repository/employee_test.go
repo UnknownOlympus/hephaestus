@@ -13,17 +13,17 @@ import (
 )
 
 const saveEmployeeQuery = `
-	INSERT INTO employees (id, fullname, position, email, phone)
-	VALUES ($1, $2, $3, $4, $5)
+	INSERT INTO employees (id, fullname, shortname, position, email, phone)
+	VALUES ($1, $2, $3, $4, $5, $6)
 	ON CONFLICT (id) DO NOTHING;
 `
 
 const updateEmployeeQuery = `
 	UPDATE employees
-	SET fullname = $2, position = $3, email = $4, phone = $5, updated_at = CURRENT_TIMESTAMP
+	SET fullname = $2, shortname = $3, position = $4, email = $5, phone = $6, updated_at = CURRENT_TIMESTAMP
 	WHERE id = $1;
 `
-const getEmployeeByIDQuery = `SELECT id, fullname, position, email, phone FROM employees WHERE id=$1`
+const getEmployeeByIDQuery = `SELECT id, fullname, shortname, position, email, phone FROM employees WHERE id=$1`
 
 func TestSaveEmployee_QueryError(t *testing.T) {
 	t.Parallel()
@@ -42,12 +42,19 @@ func TestSaveEmployee_QueryError(t *testing.T) {
 	expectedPhone := "123456789"
 
 	mock.ExpectExec(regexp.QuoteMeta(saveEmployeeQuery)).
-		WithArgs(expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone).
+		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnError(assert.AnError)
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.SaveEmployee(
-		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(),
+		expectedID,
+		expectedFullname,
+		expectedShortName,
+		expectedPosition,
+		expectedEmail,
+		expectedPhone,
+	)
 	if err == nil {
 		t.Error("Error was expected, but got nil.")
 	}
@@ -73,12 +80,19 @@ func TestSaveEmployee_Success(t *testing.T) {
 	expectedPhone := "123456789"
 
 	mock.ExpectExec(regexp.QuoteMeta(saveEmployeeQuery)).
-		WithArgs(expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone).
+		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.SaveEmployee(
-		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(),
+		expectedID,
+		expectedFullname,
+		expectedShortName,
+		expectedPosition,
+		expectedEmail,
+		expectedPhone,
+	)
 	if err != nil {
 		t.Errorf("Nil was expected, but got error: %s", err.Error())
 	}
@@ -104,12 +118,19 @@ func TestUpdateEmployee_QueryError(t *testing.T) {
 	expectedPhone := "123456789"
 
 	mock.ExpectExec(regexp.QuoteMeta(updateEmployeeQuery)).
-		WithArgs(expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone).
+		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnError(assert.AnError)
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.UpdateEmployee(
-		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(),
+		expectedID,
+		expectedFullname,
+		expectedShortName,
+		expectedPosition,
+		expectedEmail,
+		expectedPhone,
+	)
 	if err == nil {
 		t.Error("Error was expected, but got nil.")
 	}
@@ -135,12 +156,19 @@ func TestUpdateEmployee_Success(t *testing.T) {
 	expectedPhone := "123456789"
 
 	mock.ExpectExec(regexp.QuoteMeta(updateEmployeeQuery)).
-		WithArgs(expectedID, expectedFullname, expectedPosition, expectedEmail, expectedPhone).
+		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.UpdateEmployee(
-		context.Background(), expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone)
+		context.Background(),
+		expectedID,
+		expectedFullname,
+		expectedShortName,
+		expectedPosition,
+		expectedEmail,
+		expectedPhone,
+	)
 	if err != nil {
 		t.Errorf("Nil was expected, but got error: %s", err.Error())
 	}
@@ -185,14 +213,16 @@ func TestGetEmployeeByID_Success(t *testing.T) {
 	defer mock.Close()
 
 	expEmployee := models.Employee{
-		ID:       123,
-		FullName: "test user",
-		Position: "qa",
-		Email:    "test@test.com",
-		Phone:    "123456789",
+		ID:        123,
+		FullName:  "test user",
+		ShortName: "TU",
+		Position:  "qa",
+		Email:     "test@test.com",
+		Phone:     "123456789",
 	}
-	expectedRows := pgxmock.NewRows([]string{"id", "fullname", "position", "email", "phone"}).
-		AddRow(expEmployee.ID, expEmployee.FullName, expEmployee.Position, expEmployee.Email, expEmployee.Phone)
+	expectedRows := pgxmock.NewRows([]string{"id", "fullname", "shortname", "position", "email", "phone"}).
+		AddRow(expEmployee.ID, expEmployee.FullName, expEmployee.ShortName,
+			expEmployee.Position, expEmployee.Email, expEmployee.Phone)
 
 	mock.ExpectQuery(regexp.QuoteMeta(getEmployeeByIDQuery)).
 		WithArgs(expEmployee.ID).

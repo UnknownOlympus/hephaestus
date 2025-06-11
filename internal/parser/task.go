@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,7 +18,13 @@ import (
 
 var ErrScrapeTask = errors.New("failed to scrape tasks")
 
-func ParseTasksByDate(ctx context.Context, client *http.Client, date time.Time, destURL string) ([]models.Task, error) {
+func ParseTasksByDate(
+	ctx context.Context,
+	log *slog.Logger,
+	client *http.Client,
+	date time.Time,
+	destURL string,
+) ([]models.Task, error) {
 	data := url.Values{}
 
 	// Set data payload
@@ -32,13 +38,13 @@ func ParseTasksByDate(ctx context.Context, client *http.Client, date time.Time, 
 	data.Set("date_update2_date1", date.Format("02.01.2006"))
 	data.Set("date_update2_date2", date.Format("02.01.2006"))
 
-	resp, err := getHTMLResponse(ctx, client, &data, destURL)
+	resp, err := GetHTMLResponse(ctx, client, &data, destURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get response html reposnse: %w", err)
+		return nil, fmt.Errorf("failed to get html response: %w", err)
 	}
 	defer resp.Body.Close()
 
-	return parseTasksFromBody(resp.Body)
+	return parseTasksFromBody(resp.Body, log)
 }
 
 func ParseTaskTypes(ctx context.Context, client *http.Client, destURL string) ([]string, error) {
@@ -49,11 +55,11 @@ func ParseTaskTypes(ctx context.Context, client *http.Client, destURL string) ([
 	data.Set("core_section", "task")
 	data.Set("action", "group_task_type_list")
 
-	task_id_counter := 3
-	for i := range task_id_counter {
-		data.Set("id", strconv.Itoa(i+1))
+	taskIDCounter := 3
+	for index := range taskIDCounter {
+		data.Set("id", strconv.Itoa(index+1))
 
-		resp, err := getHTMLResponse(ctx, client, &data, destURL)
+		resp, err := GetHTMLResponse(ctx, client, &data, destURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get response which should retrieve task types: %w", err)
 		}
@@ -61,7 +67,7 @@ func ParseTaskTypes(ctx context.Context, client *http.Client, destURL string) ([
 
 		taskTypesbyID, err := parseTaskTypes(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse task types for id '%d': %w", i+1, err)
+			return nil, fmt.Errorf("failed to parse task types for id '%d': %w", index+1, err)
 		}
 
 		taskTypes = append(taskTypes, taskTypesbyID...)
@@ -87,57 +93,58 @@ func parseTaskTypes(in io.ReadCloser) ([]string, error) {
 	return taskTypes, nil
 }
 
-func parseTasksFromBody(in io.ReadCloser) ([]models.Task, error) {
+func parseTasksFromBody(in io.ReadCloser, log *slog.Logger) ([]models.Task, error) {
 	var tasks []models.Task
+	var err error
 
 	doc, err := goquery.NewDocumentFromReader(in)
 	if err != nil {
 		return nil, fmt.Errorf("data cannot be parsed as HTML: %w", err)
 	}
 
-	doc.Find(`tr[tag^="row_"]`).Each(func(_ int, s *goquery.Selection) {
+	doc.Find(`tr[tag^="row_"]`).Each(func(_ int, row *goquery.Selection) {
 		task := models.Task{}
 
-		task.ID, err = strconv.Atoi(strings.TrimSpace(s.Find("td:nth-child(7) a").Text()))
+		task.ID, err = strconv.Atoi(strings.TrimSpace(row.Find("td:nth-child(7) a").Text()))
 		if err != nil {
-			log.Printf("Failed to convert task `ID` string to integer type: %v", err)
+			log.Debug("Failed to convert task `ID` string to integer type", "error", err)
 		}
 
 		task.CreatedAt, err = time.Parse(
-			"02.01.2006", strings.TrimSpace(s.Find("td:nth-child(8)").Contents().First().Text()),
+			"02.01.2006", strings.TrimSpace(row.Find("td:nth-child(8)").Contents().First().Text()),
 		)
 		if err != nil {
-			log.Printf("failed to convert string createdAt to go type time.Time: %v", err)
+			log.Debug("Failed to convert string createdAt to go type time.Time", "error", err)
 		}
 		task.ClosedAt, err = time.Parse(
-			"02.01.2006", strings.TrimSpace(s.Find("td:nth-child(9)").Contents().First().Text()),
+			"02.01.2006", strings.TrimSpace(row.Find("td:nth-child(9)").Contents().First().Text()),
 		)
 		if err != nil {
-			log.Printf("failed to convert string closedAt to go type time.Time: %v", err)
+			log.Debug("Failed to convert string closedAt to go type time.Time", "error", err)
 		}
 
-		task.Address = strings.TrimSpace(s.Find("td:nth-child(10)").Text())
+		task.Address = strings.TrimSpace(row.Find("td:nth-child(10)").Text())
 
-		customerInfo, err := s.Find("td:nth-child(11)").Html()
-		if err != nil {
-			log.Printf("Failed to get customer info: %v", err)
+		customerInfo, errCustomer := row.Find("td:nth-child(11)").Html()
+		if errCustomer != nil {
+			log.Debug("Failed to get customer info", "error", err)
 		}
 
-		task.CustomerName, task.CustomerLogin = parseCustomerInfo(customerInfo)
-		task.Type = strings.TrimSpace(s.Find("td:nth-child(13) b").First().Text())
-		task.Description = strings.TrimSpace(s.Find("td:nth-child(13) .div_journal_opis").Text())
+		task.CustomerName, task.CustomerLogin = ParseCustomerInfo(customerInfo, log)
+		task.Type = strings.TrimSpace(row.Find("td:nth-child(13) b").First().Text())
+		task.Description = strings.TrimSpace(row.Find("td:nth-child(13) .div_journal_opis").Text())
 
-		rawExecutors, err := s.Find("td:nth-child(14)").Html()
-		if err != nil {
-			log.Printf("Failed to get executors: %v", err)
+		rawExecutors, errExecutor := row.Find("td:nth-child(14)").Html()
+		if errExecutor != nil {
+			log.Debug("Failed to get executors", "error", err)
 		}
-		task.Executors = parseExecutors(rawExecutors)
+		task.Executors = ParseExecutors(rawExecutors)
 
-		rawComments, err := s.Find("td:nth-child(5)").Html()
-		if err != nil {
-			log.Printf("Failed to get comments: %v", err)
+		rawComments, errComments := row.Find("td:nth-child(5)").Html()
+		if errComments != nil {
+			log.Debug("Failed to get comments", "error", err)
 		}
-		task.Comments = parseExecutors(rawComments)
+		task.Comments = ParseExecutors(rawComments)
 
 		tasks = append(tasks, task)
 	})
@@ -145,7 +152,12 @@ func parseTasksFromBody(in io.ReadCloser) ([]models.Task, error) {
 	return tasks, nil
 }
 
-func getHTMLResponse(ctx context.Context, client *http.Client, data *url.Values, destURL string) (*http.Response, error) {
+func GetHTMLResponse(
+	ctx context.Context,
+	client *http.Client,
+	data *url.Values,
+	destURL string,
+) (*http.Response, error) {
 	reqURL, err := url.Parse(destURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse destination URL %s: %w", destURL, err)
@@ -172,14 +184,14 @@ func getHTMLResponse(ctx context.Context, client *http.Client, data *url.Values,
 	return resp, nil
 }
 
-func parseCustomerInfo(rawHTML string) (string, string) {
+func ParseCustomerInfo(rawHTML string, log *slog.Logger) (string, string) {
 	const lenParts = 2
 	var customerName string
 	var customerLogin string
 
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(rawHTML))
 	if err != nil {
-		log.Printf("failed to parse customer info: %v", err)
+		log.Debug("failed to parse customer info", "error", err)
 		return "", ""
 	}
 
@@ -201,12 +213,10 @@ func parseCustomerInfo(rawHTML string) (string, string) {
 		return customerName, "n/a"
 	}
 
-	log.Printf("Nothing found in client info: %v", doc.Text())
-
 	return "", ""
 }
 
-func parseExecutors(rawHTML string) []string {
+func ParseExecutors(rawHTML string) []string {
 	var executors []string
 
 	parts := strings.Split(rawHTML, "<br/>")
@@ -216,7 +226,7 @@ func parseExecutors(rawHTML string) []string {
 			text = strings.Split(text, "<i>")[0]
 		}
 		if text != "" {
-			executors = append(executors, text)
+			executors = append(executors, strings.TrimSpace(text))
 		}
 	}
 

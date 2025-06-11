@@ -31,9 +31,11 @@ func NewEmployeeRepository(db Database) EmployeeRepoIface {
 	return &Repository{db: db}
 }
 
-// TaskRepoIface represents the interface for interacting with task data in the repository
+// TaskRepoIface represents the interface for interacting with task data in the repository.
 type TaskRepoIface interface {
 	GetOrCreateTaskTypeID(ctx context.Context, typeName string) (int, error)
+	UpsertTask(ctx context.Context, task models.Task, typeID int) error
+	UpdateTaskExecutors(ctx context.Context, taskID int, executors []string) error
 	SaveTaskData(ctx context.Context, task models.Task) error
 }
 

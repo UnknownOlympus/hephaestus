@@ -2,10 +2,14 @@ package tasks
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
+	"github.com/Houeta/us-api-provider/internal/auth"
 	"github.com/Houeta/us-api-provider/internal/client"
 	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/Houeta/us-api-provider/internal/parser"
@@ -32,54 +36,161 @@ func (ts *TaskService) initLogger(opn string) *slog.Logger {
 	)
 }
 
-func (ts *TaskService) Run(loginURL, baseURL, username, password string) ([]models.Task, error) {
-	const opn = "Tasks.Run"
+func (ts *TaskService) Start(
+	ctx context.Context,
+	loginURL, baseURL, username, password string,
+	interval time.Duration,
+) error {
+	const opn = "Tasks.Start"
+	log := ts.initLogger(opn)
 
 	var err error
-	log := ts.initLogger(opn)
-	ctxTimeout := 5
+
 	httpClient := client.CreateHTTPClient(log)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(ctxTimeout*int(time.Second)))
-	defer cancel()
 
-	log.InfoContext(ctx, "Starting the service")
-	log.InfoContext(ctx, "Attempting login", "url", baseURL)
-
-	if err = ts.retryLogin(ctx, log, httpClient, loginURL, baseURL, username, password); err != nil {
-		return nil, fmt.Errorf("failed to login by url '%s': %w", loginURL, err)
+	// 1. Login
+	log.InfoContext(ctx, "Attempting login...")
+	if err = auth.RetryLogin(ctx, log, httpClient, loginURL, baseURL, username, password); err != nil {
+		return fmt.Errorf("failed to login: %w", err)
 	}
+	log.InfoContext(ctx, "Login successful.")
 
-	lastDate, err := ts.GetLastDate(ctx)
-	if err != nil {
-		log.ErrorContext(ctx, "Failed to get latest processed date", "error", err.Error())
-		return nil, fmt.Errorf("failed to get latest processed date from repository: %w", err)
-	}
-
+	// 2. Update task types
 	if err = ts.GetTaskTypes(ctx, httpClient, baseURL); err != nil {
-		return nil, fmt.Errorf("failed to get task types on '%s': %w", baseURL, err)
+		return fmt.Errorf("failed to get task types: %w", err)
 	}
 
-	if !lastDate.After(time.Now()) {
-		log.DebugContext(ctx, "Scrapind data", "date", lastDate.Format("02.01.2006"))
+	// 3. Catch-up mode
+	if err = ts.catchUpToNow(ctx, httpClient, baseURL); err != nil {
+		return fmt.Errorf("failed during catch-up process: %w", err)
+	}
 
-		tasks, err := parser.ParseTasksByDate(ctx, httpClient, lastDate, baseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse from %s: %w", baseURL, err)
-		}
+	// 4. Maintenance mode
+	log.InfoContext(ctx, "Switching to maintenance mode.", "interval", interval.String())
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
-		for _, task := range tasks {
-			if err = ts.repo.SaveTaskData(ctx, task); err != nil {
-				return nil, fmt.Errorf("failed to save task '%d' in repository: %w", task.ID, err)
-			} else {
-				log.DebugContext(ctx, "task processed successfully", "id", task.ID)
+	for {
+		select {
+		case <-ticker.C:
+			log.InfoContext(ctx, "Periodic check triggered.")
+			if err = ts.catchUpToNow(ctx, httpClient, baseURL); err != nil {
+				log.ErrorContext(ctx, "Periodic run failed", "error", err)
 			}
+		case <-ctx.Done():
+			log.InfoContext(ctx, "Service shutting down.")
+			return nil
+		}
+	}
+}
+
+func (ts *TaskService) catchUpToNow(ctx context.Context, httpClient *http.Client, baseURL string) error {
+	const opn = "Tasks.catchUpToNow"
+	log := ts.initLogger(opn)
+
+	log.InfoContext(ctx, "Starting catch-up mode")
+
+	for {
+		lastDate, err := ts.GetLastDate(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get latest processed date: %w", err)
 		}
 
-		// if err := ts.statusRepo.SaveProcessedDate(ctx, lastDate.AddDate(0, 0, 1)); err != nil {
-		// 	return nil, fmt.Errorf("failed to save next processed date: %w", err)
-		// }
-		return tasks, nil
+		today := time.Now()
+		todayTruncated := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+		lastDateTruncated := time.Date(
+			lastDate.Year(),
+			lastDate.Month(),
+			lastDate.Day(),
+			0,
+			0,
+			0,
+			0,
+			lastDate.Location(),
+		)
+
+		if !lastDateTruncated.Before(todayTruncated) {
+			log.InfoContext(
+				ctx,
+				"Catch-up complete. Last processed date is up-to-date.",
+				"lastDate",
+				lastDate.Format("2006-01-02"),
+			)
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			log.InfoContext(ctx, "Catch-up cancelled.")
+			return fmt.Errorf("context initalize error: %w", ctx.Err())
+		default:
+		}
+
+		if _, err = ts.processDate(ctx, httpClient, lastDate, baseURL); err != nil {
+			return fmt.Errorf("failed to process date %s during catch-up: %w", lastDate.Format("2006-01-02"), err)
+		}
+	}
+}
+
+func (ts *TaskService) processDate(ctx context.Context, httpClient *http.Client, dateToParse time.Time, baseURL string,
+) ([]models.Task, error) {
+	const opn = "Tasks.processDate"
+	log := ts.initLogger(opn)
+
+	log.DebugContext(ctx, "Scraping data", "date", dateToParse.Format("02.01.2006"))
+
+	tasks, err := parser.ParseTasksByDate(ctx, log, httpClient, dateToParse, baseURL)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to parse from '%s' for date '%s': %w",
+			baseURL,
+			dateToParse.Format("2006-01-02"),
+			err,
+		)
 	}
 
-	return nil, nil
+	for _, task := range tasks {
+		if err = ts.repo.SaveTaskData(ctx, task); err != nil {
+			return nil, fmt.Errorf("failed to save task '%d' in repository: %w", task.ID, err)
+		}
+	}
+
+	nextDate := dateToParse.AddDate(0, 0, 1)
+	if err = ts.statusRepo.SaveProcessedDate(ctx, nextDate); err != nil {
+		return nil, fmt.Errorf("failed to save next processed date '%s': %w", nextDate.Format("02.01.2006"), err)
+	}
+
+	log.DebugContext(ctx, "Successfully processed date", "date", dateToParse.Format("02.01.2006"))
+
+	return tasks, nil
+}
+
+func (ts *TaskService) GetLastDate(ctx context.Context) (time.Time, error) {
+	lastDate, err := ts.statusRepo.GetLastProcessedDate(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			lastDate = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+		} else {
+			return time.Time{}, fmt.Errorf("failed to get latest processed date: %w", err)
+		}
+	}
+
+	return lastDate, nil
+}
+
+func (ts *TaskService) GetTaskTypes(ctx context.Context, client *http.Client, destURL string) error {
+	var err error
+
+	taskNames, err := parser.ParseTaskTypes(ctx, client, destURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse task types from '%s': %w", destURL, err)
+	}
+
+	for _, task := range taskNames {
+		if _, err = ts.repo.GetOrCreateTaskTypeID(ctx, task); err != nil {
+			return fmt.Errorf("failed to save task name '%s' in repository: %w", task, err)
+		}
+	}
+
+	return nil
 }

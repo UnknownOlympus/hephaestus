@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Houeta/us-api-provider/internal/models"
@@ -20,9 +21,9 @@ func (r *Repository) GetOrCreateTaskTypeID(ctx context.Context, typeName string)
 		VALUES ($1)
 		ON CONFLICT (type_name) DO NOTHING;
 	`
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		// type not found, insert it
-		_, err := r.db.Exec(ctx, insertQuery, typeName)
+		_, err = r.db.Exec(ctx, insertQuery, typeName)
 		if err != nil {
 			return 0, fmt.Errorf("error inserting new task type '%s': %w", typeName, err)
 		}
@@ -69,7 +70,7 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 
 	if exists {
 		// task is existed, updating
-		_, err := r.db.Exec(ctx, `
+		_, err = r.db.Exec(ctx, `
 			UPDATE tasks
 			SET
 				task_type_id = $1,
@@ -99,7 +100,7 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 			INSERT INTO tasks (task_id, task_type_id, creation_date, closing_date, description, address, customer_name, customer_login, comments)
 			VALUES ($1, (SELECT type_id FROM task_types WHERE type_name = $2), $3, $4, $5, $6, $7, $8, $9)
 		`
-		_, err := r.db.Exec(ctx, query, task.ID, task.Type, task.CreatedAt, task.ClosedAt, task.Description,
+		_, err = r.db.Exec(ctx, query, task.ID, task.Type, task.CreatedAt, task.ClosedAt, task.Description,
 			task.Address, task.CustomerName, task.CustomerLogin, task.Comments,
 		)
 		if err != nil {
@@ -123,7 +124,7 @@ func (r *Repository) UpdateTaskExecutors(ctx context.Context, taskID int, execut
 
 	// 2. Insert new executors
 	for _, executorName := range executors {
-		_, err := r.db.Exec(ctx, query, taskID, executorName)
+		_, err = r.db.Exec(ctx, query, taskID, executorName)
 		if err != nil {
 			return fmt.Errorf("failed to save link between task '%d' and employee '%s': %w", taskID, executorName, err)
 		}

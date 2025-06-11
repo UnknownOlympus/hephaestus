@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/Houeta/us-api-provider/internal/auth"
 	"github.com/Houeta/us-api-provider/internal/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type errorReader struct{}
@@ -256,4 +259,33 @@ func TestLogin(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRetryLogin_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusOK)
+		t.Log(writer, "Login successful")
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	err := auth.RetryLogin(context.Background(), logger, server.Client(), server.URL, server.URL, "test", "te")
+	assert.NoError(t, err)
+}
+
+func TestRetryLogin_Error(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode.")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	err := auth.RetryLogin(context.Background(), logger, server.Client(), server.URL, server.URL, "test", "te")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "failed to login after multiple retries")
 }

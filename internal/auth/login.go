@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Houeta/us-api-provider/internal/models"
 )
@@ -51,4 +53,31 @@ func Login(ctx context.Context, client *http.Client, loginURL, baseURL, username
 	}
 
 	return nil
+}
+
+func RetryLogin(
+	ctx context.Context,
+	log *slog.Logger,
+	httpClient *http.Client,
+	loginURL, baseURL, username, password string,
+) error {
+	var err error
+
+	const retryTimeout = 5 * time.Second
+	const retries = 3
+
+	for index := range retries {
+		err = Login(ctx, httpClient, loginURL, baseURL, username, password)
+		if err == nil {
+			log.InfoContext(ctx, "Successfuly logged in")
+			return nil
+		}
+
+		log.WarnContext(ctx, "Failed to login, retrying...", "attempt", index+1, "of", retries, "error", err.Error())
+		time.Sleep(retryTimeout)
+	}
+
+	finalError := errors.New("failed to login after multiple retries")
+	log.ErrorContext(ctx, finalError.Error(), "last_error", err)
+	return finalError
 }
