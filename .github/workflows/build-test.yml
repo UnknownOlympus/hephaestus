@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  GOLANG_VERSION: '1.16' # Set the desired Go version here
+  GOLANG_VERSION: '1.23'
 
 jobs:
   build:
