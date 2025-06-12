@@ -36,11 +36,7 @@ jobs:
           set -eu -o pipefail
 
           NEW_GOROOT="${HOME}/go"
-          OSARCH="linux/amd64 windows/amd64"
-
           mkdir -p "${NEW_GOROOT}"
-          cp -r "${GOROOT}" "${HOME}"
-
           export GOROOT="${NEW_GOROOT}"
           export PATH="${GOROOT}/bin:${PATH}"
           go get github.com/mitchellh/gox
