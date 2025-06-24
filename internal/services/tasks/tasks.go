@@ -11,7 +11,6 @@ import (
 
 	"github.com/Houeta/us-api-provider/internal/auth"
 	"github.com/Houeta/us-api-provider/internal/client"
-	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/Houeta/us-api-provider/internal/parser"
 	"github.com/Houeta/us-api-provider/internal/repository"
 )
@@ -20,6 +19,7 @@ type TaskService struct {
 	log        *slog.Logger
 	repo       repository.TaskRepoIface
 	statusRepo repository.StatusRepoIface
+	parser     parser.TaskInterface
 }
 
 func NewTaskService(log *slog.Logger,
@@ -47,6 +47,7 @@ func (ts *TaskService) Start(
 	var err error
 
 	httpClient := client.CreateHTTPClient(log)
+	ts.parser = parser.NewTaskParser(httpClient, log, baseURL)
 
 	// 1. Login
 	log.InfoContext(ctx, "Attempting login...")
@@ -61,7 +62,7 @@ func (ts *TaskService) Start(
 	}
 
 	// 3. Catch-up mode
-	if err = ts.catchUpToNow(ctx, httpClient, baseURL); err != nil {
+	if err = ts.catchUpToNow(ctx, baseURL); err != nil {
 		return fmt.Errorf("failed during catch-up process: %w", err)
 	}
 
@@ -74,7 +75,7 @@ func (ts *TaskService) Start(
 		select {
 		case <-ticker.C:
 			log.InfoContext(ctx, "Periodic check triggered.")
-			if err = ts.catchUpToNow(ctx, httpClient, baseURL); err != nil {
+			if err = ts.processDate(ctx, time.Now(), baseURL); err != nil {
 				log.ErrorContext(ctx, "Periodic run failed", "error", err)
 			}
 		case <-ctx.Done():
@@ -84,7 +85,7 @@ func (ts *TaskService) Start(
 	}
 }
 
-func (ts *TaskService) catchUpToNow(ctx context.Context, httpClient *http.Client, baseURL string) error {
+func (ts *TaskService) catchUpToNow(ctx context.Context, baseURL string) error {
 	const opn = "Tasks.catchUpToNow"
 	log := ts.initLogger(opn)
 
@@ -109,7 +110,7 @@ func (ts *TaskService) catchUpToNow(ctx context.Context, httpClient *http.Client
 			lastDate.Location(),
 		)
 
-		if !lastDateTruncated.Before(todayTruncated) {
+		if lastDateTruncated.After(todayTruncated) {
 			log.InfoContext(
 				ctx,
 				"Catch-up complete. Last processed date is up-to-date.",
@@ -126,43 +127,57 @@ func (ts *TaskService) catchUpToNow(ctx context.Context, httpClient *http.Client
 		default:
 		}
 
-		if _, err = ts.processDate(ctx, httpClient, lastDate, baseURL); err != nil {
+		if err = ts.processDate(ctx, lastDate, baseURL); err != nil {
 			return fmt.Errorf("failed to process date %s during catch-up: %w", lastDate.Format("2006-01-02"), err)
 		}
 	}
 }
 
-func (ts *TaskService) processDate(ctx context.Context, httpClient *http.Client, dateToParse time.Time, baseURL string,
-) ([]models.Task, error) {
+func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time, baseURL string,
+) error {
 	const opn = "Tasks.processDate"
 	log := ts.initLogger(opn)
 
-	log.DebugContext(ctx, "Scraping data", "date", dateToParse.Format("02.01.2006"))
+	normalizedDate := time.Date(
+		dateToParse.Year(), dateToParse.Month(), dateToParse.Day(), 0, 0, 0, 0, dateToParse.Location())
 
-	tasks, err := parser.ParseTasksByDate(ctx, log, httpClient, dateToParse, baseURL)
+	log.DebugContext(ctx, "Scraping data", "date", normalizedDate.Format("02.01.2006"))
+
+	tasks, err := ts.parser.ParseTasksByDate(ctx, normalizedDate)
 	if err != nil {
-		return nil, fmt.Errorf(
+		return fmt.Errorf(
 			"failed to parse from '%s' for date '%s': %w",
 			baseURL,
-			dateToParse.Format("2006-01-02"),
+			normalizedDate.Format("2006-01-02"),
 			err,
 		)
 	}
 
+	if len(tasks) == 0 {
+		log.DebugContext(ctx, "No tasks found for date", "date", normalizedDate.Format("2006-01-02"))
+	}
+
 	for _, task := range tasks {
 		if err = ts.repo.SaveTaskData(ctx, task); err != nil {
-			return nil, fmt.Errorf("failed to save task '%d' in repository: %w", task.ID, err)
+			return fmt.Errorf("failed to save task '%d' in repository: %w", task.ID, err)
 		}
 	}
 
-	nextDate := dateToParse.AddDate(0, 0, 1)
-	if err = ts.statusRepo.SaveProcessedDate(ctx, nextDate); err != nil {
-		return nil, fmt.Errorf("failed to save next processed date '%s': %w", nextDate.Format("02.01.2006"), err)
+	lastDate, err := ts.GetLastDate(ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("failed to get last processed date for comparison: %w", err)
+	}
+
+	if normalizedDate.After(lastDate) || errors.Is(err, sql.ErrNoRows) {
+		nextDate := dateToParse.AddDate(0, 0, 1)
+		if err = ts.statusRepo.SaveProcessedDate(ctx, nextDate); err != nil {
+			return fmt.Errorf("failed to save next processed date '%s': %w", nextDate.Format("02.01.2006"), err)
+		}
 	}
 
 	log.DebugContext(ctx, "Successfully processed date", "date", dateToParse.Format("02.01.2006"))
 
-	return tasks, nil
+	return nil
 }
 
 func (ts *TaskService) GetLastDate(ctx context.Context) (time.Time, error) {
