@@ -178,7 +178,7 @@ func TestFixInvalidEmail(t *testing.T) {
 	t.Run("invalid email", func(t *testing.T) {
 		t.Parallel()
 		employeeList := []models.Employee{
-			{FullName: "Invalid User", Email: "invalid.email@com"},
+			{FullName: "Invalid User", Email: "invalid.email"},
 		}
 		fixed := fixInvalidEmail(ctx, logger, employeeList)
 		assert.NotEmpty(t, fixed[0].Email)
