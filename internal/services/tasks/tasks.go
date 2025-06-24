@@ -97,17 +97,19 @@ func (ts *TaskService) catchUpToNow(ctx context.Context, baseURL string) error {
 			return fmt.Errorf("failed to get latest processed date: %w", err)
 		}
 
-		today := time.Now()
-		todayTruncated := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+		today := time.Now().UTC()
+		lastDateUTC := lastDate.UTC()
+
+		todayTruncated := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
 		lastDateTruncated := time.Date(
-			lastDate.Year(),
-			lastDate.Month(),
-			lastDate.Day(),
+			lastDateUTC.Year(),
+			lastDateUTC.Month(),
+			lastDateUTC.Day(),
 			0,
 			0,
 			0,
 			0,
-			lastDate.Location(),
+			time.UTC,
 		)
 
 		if lastDateTruncated.After(todayTruncated) {
@@ -139,7 +141,7 @@ func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time, b
 	log := ts.initLogger(opn)
 
 	normalizedDate := time.Date(
-		dateToParse.Year(), dateToParse.Month(), dateToParse.Day(), 0, 0, 0, 0, dateToParse.Location())
+		dateToParse.Year(), dateToParse.Month(), dateToParse.Day(), 0, 0, 0, 0, time.UTC)
 
 	log.DebugContext(ctx, "Scraping data", "date", normalizedDate.Format("02.01.2006"))
 
@@ -163,16 +165,9 @@ func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time, b
 		}
 	}
 
-	lastDate, err := ts.GetLastDate(ctx)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("failed to get last processed date for comparison: %w", err)
-	}
-
-	if normalizedDate.After(lastDate) || errors.Is(err, sql.ErrNoRows) {
-		nextDate := dateToParse.AddDate(0, 0, 1)
-		if err = ts.statusRepo.SaveProcessedDate(ctx, nextDate); err != nil {
-			return fmt.Errorf("failed to save next processed date '%s': %w", nextDate.Format("02.01.2006"), err)
-		}
+	nextDate := dateToParse.AddDate(0, 0, 1)
+	if err = ts.statusRepo.SaveProcessedDate(ctx, nextDate); err != nil {
+		return fmt.Errorf("failed to save next processed date '%s': %w", nextDate.Format("02.01.2006"), err)
 	}
 
 	log.DebugContext(ctx, "Successfully processed date", "date", dateToParse.Format("02.01.2006"))

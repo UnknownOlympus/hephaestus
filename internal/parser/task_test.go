@@ -20,7 +20,9 @@ const completedTasksHTML = `
 <table>
     <tbody>
         <tr tag="row_12345">
-            <td></td><td></td><td></td><td></td>
+            <td></td>
+			<td>Scheduled work</td>
+			<td></td><td></td>
             <td>Comment 1<br/>Comment 2</td>
             <td></td>
             <td><a>12345</a></td>
@@ -33,7 +35,9 @@ const completedTasksHTML = `
             <td>Executor 1<br/>Executor 2<i>(additional)</i></td>
         </tr>
         <tr tag="row_12346">
-            <td></td><td></td><td></td><td></td>
+            <td></td>
+			<td>Emergency work</td>
+			<td></td><td></td>
             <td></td>
             <td></td>
             <td><a>12346</a></td>
@@ -46,7 +50,9 @@ const completedTasksHTML = `
             <td>Executor 1</td>
         </tr>
 		<tr tag="row_invalid">
-            <td></td><td></td><td></td><td></td>
+			<td></td>
+			<td>Scheduled work</td>
+			<td></td><td></td>
             <td></td>
             <td></td>
             <td><a>not-an-integer</a></td>
@@ -83,7 +89,9 @@ const uncompletedTasksHTML = `
 <table>
     <tbody>
         <tr tag="row_12345">
-            <td></td><td></td><td></td><td></td>
+			<td></td>
+			<td>Scheduled work</td>
+			<td></td><td></td>
             <td>Comment 1<br/>Comment 2</td>
             <td></td>
             <td><a>12345</a></td>

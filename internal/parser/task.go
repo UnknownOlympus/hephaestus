@@ -206,7 +206,7 @@ func (tp *TaskParser) parseTasksFromBody(inp io.ReadCloser, isCompleted bool) ([
 		}
 
 		task.Address = extractText(row, config.address)
-		task.Type = extractText(row, config.taskType+" b")
+		task.Type = strings.TrimSpace(row.Find(config.taskType + " b").First().Text())
 		task.Description = extractText(row, config.description)
 		if !utf8.ValidString(task.Description) {
 			task.Description = ""
