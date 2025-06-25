@@ -61,52 +61,33 @@ func (r *Repository) SaveTaskData(ctx context.Context, task models.Task) error {
 }
 
 func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID int) error {
-	// check if record exists
-	var exists bool
-	err := r.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tasks WHERE task_id = $1)", task.ID).Scan(&exists)
+	isClosed := !task.ClosedAt.IsZero()
+
+	query := `
+		INSERT INTO tasks (
+			task_id, task_type_id, creation_date, closing_date, description,
+			address, customer_name, customer_login, comments, is_closed
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (task_id) DO UPDATE SET
+			task_type_id = EXCLUDED.task_type_id,
+			closing_date = EXCLUDED.closing_date,
+			description = EXCLUDED.description,
+			address = EXCLUDED.address,
+			customer_name = EXCLUDED.customer_name,
+			customer_login = EXCLUDED.customer_login,
+			comments = EXCLUDED.comments,
+			is_closed = EXCLUDED.is_closed,
+			updated_at = CURRENT_TIMESTAMP;
+	`
+	_, err := r.db.Exec(ctx, query,
+		task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description,
+		task.Address, task.CustomerName, task.CustomerLogin, task.Comments, isClosed,
+	)
 	if err != nil {
-		return fmt.Errorf("error cheking the existence of the task: %w", err)
+		return fmt.Errorf("upsert task error for task '%d': %w", task.ID, err)
 	}
 
-	if exists {
-		// task is existed, updating
-		_, err = r.db.Exec(ctx, `
-			UPDATE tasks
-			SET
-				task_type_id = $1,
-				closing_date = $2,
-				description = $3,
-				address = $4,
-				customer_name = $5,
-				customer_login = $6,
-				comments = $7
-			WHERE
-				task_id = $8`,
-			typeID,
-			task.ClosedAt,
-			task.Description,
-			task.Address,
-			task.CustomerName,
-			task.CustomerLogin,
-			task.Comments,
-			task.ID,
-		)
-		if err != nil {
-			return fmt.Errorf("task update error '%d': %w", task.ID, err)
-		}
-	} else {
-		// task doesnt exist, insert new one
-		query := `
-			INSERT INTO tasks (task_id, task_type_id, creation_date, closing_date, description, address, customer_name, customer_login, comments)
-			VALUES ($1, (SELECT type_id FROM task_types WHERE type_name = $2), $3, $4, $5, $6, $7, $8, $9)
-		`
-		_, err = r.db.Exec(ctx, query, task.ID, task.Type, task.CreatedAt, task.ClosedAt, task.Description,
-			task.Address, task.CustomerName, task.CustomerLogin, task.Comments,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to insert new task '%d': %w", task.ID, err)
-		}
-	}
 	return nil
 }
 

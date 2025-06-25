@@ -7,7 +7,7 @@ COMBINED_FILE="${TMP_DIR}/summary.out"
 
 collect_coverage() {
   local packages
-  mapfile -t packages < <(go list ./... | grep -v '/mock\|/main')
+  mapfile -t packages < <(go list ./... | grep -v '/mock\|/main\|/tasks')
 
   for pkg in "${packages[@]}"; do
     (

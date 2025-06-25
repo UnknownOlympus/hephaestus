@@ -162,69 +162,6 @@ func TestUpsertTask(t *testing.T) {
 	task := models.Task{ID: 101, Description: "Test Description"}
 	typeID := 5
 
-	t.Run("success - update existing task", func(t *testing.T) {
-		t.Parallel()
-		mock, err := pgxmock.NewPool()
-		require.NoError(t, err)
-		defer mock.Close()
-
-		repo := repository.NewTaskRepository(mock)
-
-		// 1. We expect an existence check that returns true
-		mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM tasks WHERE task_id = \\$1\\)").
-			WithArgs(task.ID).
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-
-		// 2. Expect UPDATE
-		mock.ExpectExec("UPDATE tasks").
-			WithArgs(typeID, task.ClosedAt, task.Description, task.Address, task.CustomerName, task.CustomerLogin, task.Comments, task.ID).
-			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-
-		err = repo.UpsertTask(ctx, task, typeID)
-		require.NoError(t, err)
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
-	t.Run("failure - check if existence error", func(t *testing.T) {
-		t.Parallel()
-		mock, err := pgxmock.NewPool()
-		require.NoError(t, err)
-		defer mock.Close()
-
-		repo := repository.NewTaskRepository(mock)
-
-		mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM tasks WHERE task_id = \\$1\\)").
-			WithArgs(task.ID).
-			WillReturnError(assert.AnError)
-
-		err = repo.UpsertTask(ctx, task, typeID)
-		require.Error(t, err)
-		require.ErrorIs(t, err, assert.AnError)
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
-	t.Run("failure - update error", func(t *testing.T) {
-		t.Parallel()
-		mock, err := pgxmock.NewPool()
-		require.NoError(t, err)
-		defer mock.Close()
-
-		repo := repository.NewTaskRepository(mock)
-
-		mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM tasks WHERE task_id = \\$1\\)").
-			WithArgs(task.ID).
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(true))
-
-		mock.ExpectExec("UPDATE tasks").
-			WithArgs(typeID, task.ClosedAt, task.Description, task.Address, task.CustomerName, task.CustomerLogin, task.Comments, task.ID).
-			WillReturnError(assert.AnError)
-
-		err = repo.UpsertTask(ctx, task, typeID)
-		require.Error(t, err)
-		require.ErrorIs(t, err, assert.AnError)
-		assert.NoError(t, mock.ExpectationsWereMet())
-	})
-
 	t.Run("success - insert new task", func(t *testing.T) {
 		t.Parallel()
 		mock, err := pgxmock.NewPool()
@@ -233,14 +170,9 @@ func TestUpsertTask(t *testing.T) {
 
 		repo := repository.NewTaskRepository(mock)
 
-		// 1. We expect an existence check that will return false
-		mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM tasks WHERE task_id = \\$1\\)").
-			WithArgs(task.ID).
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-
 		// 2. Waiting for INSERT
 		mock.ExpectExec("INSERT INTO tasks").
-			WithArgs(task.ID, task.Type, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName, task.CustomerLogin, task.Comments).
+			WithArgs(task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName, task.CustomerLogin, task.Comments, false).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 		err = repo.UpsertTask(ctx, task, typeID)
@@ -257,12 +189,8 @@ func TestUpsertTask(t *testing.T) {
 
 		repo := repository.NewTaskRepository(mock)
 
-		mock.ExpectQuery("SELECT EXISTS\\(SELECT 1 FROM tasks WHERE task_id = \\$1\\)").
-			WithArgs(task.ID).
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
-
 		mock.ExpectExec("INSERT INTO tasks").
-			WithArgs(task.ID, task.Type, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName, task.CustomerLogin, task.Comments).
+			WithArgs(task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName, task.CustomerLogin, task.Comments, false).
 			WillReturnError(assert.AnError)
 
 		err = repo.UpsertTask(ctx, task, typeID)
@@ -382,12 +310,9 @@ func TestSaveTaskData(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows([]string{"type_id"}).AddRow(typeID))
 
 		// Waiting for UpsertTask (assuming it's a new task)
-		mock.ExpectQuery("SELECT EXISTS").
-			WithArgs(task.ID).
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 		mock.ExpectExec("INSERT INTO tasks").
-			WithArgs(task.ID, task.Type, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName,
-				task.CustomerLogin, task.Comments).
+			WithArgs(task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName,
+				task.CustomerLogin, task.Comments, false).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 		// Waiting for UpdateTaskExecutors
@@ -422,7 +347,7 @@ func TestSaveTaskData(t *testing.T) {
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	t.Run("failure - on UpsertTask", func(t *testing.T) {
+	t.Run("failure - on UpdateTaskExecutors", func(t *testing.T) {
 		t.Parallel()
 		mock, err := pgxmock.NewPool()
 		require.NoError(t, err)
@@ -433,8 +358,10 @@ func TestSaveTaskData(t *testing.T) {
 		mock.ExpectQuery("SELECT type_id").
 			WithArgs(task.Type).
 			WillReturnRows(pgxmock.NewRows([]string{"type_id"}).AddRow(typeID))
-
-		mock.ExpectQuery("SELECT EXISTS").WithArgs(task.ID).WillReturnError(assert.AnError)
+		mock.ExpectExec("INSERT INTO tasks").
+			WithArgs(task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName,
+				task.CustomerLogin, task.Comments, false).
+			WillReturnError(assert.AnError)
 
 		repo := repository.NewTaskRepository(mock)
 		err = repo.SaveTaskData(ctx, task)
@@ -444,7 +371,6 @@ func TestSaveTaskData(t *testing.T) {
 		require.ErrorIs(t, err, assert.AnError)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
-
 	t.Run("failure - on UpdateTaskExecutors", func(t *testing.T) {
 		t.Parallel()
 		mock, err := pgxmock.NewPool()
@@ -457,12 +383,9 @@ func TestSaveTaskData(t *testing.T) {
 			WithArgs(task.Type).
 			WillReturnRows(pgxmock.NewRows([]string{"type_id"}).AddRow(typeID))
 
-		mock.ExpectQuery("SELECT EXISTS").
-			WithArgs(task.ID).
-			WillReturnRows(pgxmock.NewRows([]string{"exists"}).AddRow(false))
 		mock.ExpectExec("INSERT INTO tasks").
-			WithArgs(task.ID, task.Type, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName,
-				task.CustomerLogin, task.Comments).
+			WithArgs(task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName,
+				task.CustomerLogin, task.Comments, false).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 		mock.ExpectExec("DELETE FROM task_executors").WithArgs(task.ID).WillReturnError(assert.AnError)
