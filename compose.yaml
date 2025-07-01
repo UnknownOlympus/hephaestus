@@ -9,7 +9,20 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
     restart: unless-stopped
+    networks:
+      - radireporter
 
+  migrator:
+    image: us-api-provider:1.0.0
+    environment:
+      CONFIG_PATH: "/etc/config.yaml"
+    volumes:
+      - ./config.test.yaml:/etc/config.yaml:z
+    entrypoint:
+      - ./migrator
+    networks:
+      - radireporter
+    
   app:
     depends_on:
       - postgres
