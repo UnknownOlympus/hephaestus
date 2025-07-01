@@ -1,6 +1,6 @@
 module github.com/Houeta/us-api-provider
 
-go 1.23.4
+go 1.24.3
 
 require (
 	github.com/Flaque/filet v0.0.0-20201012163910-45f684403088

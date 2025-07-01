@@ -1,3 +1,6 @@
+networks:
+  radireporter:
+
 services:
   postgres:
     image: postgres
@@ -6,3 +9,16 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
     restart: unless-stopped
+
+  app:
+    depends_on:
+      - postgres
+    build:
+      context: .
+    environment:
+      CONFIG_PATH: "/etc/config.yaml"
+    volumes:
+      - ./config.test.yaml:/etc/config.yaml:z
+    networks:
+      - radireporter
+    restart: always
