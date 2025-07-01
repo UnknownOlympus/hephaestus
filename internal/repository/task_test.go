@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -16,7 +15,7 @@ import (
 // TestGetOrCreateTaskTypeID checks the logic for getting or creating a task type ID.
 func TestGetOrCreateTaskTypeID(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("success - type exists", func(t *testing.T) {
 		t.Parallel()
@@ -158,7 +157,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 // TestUpsertTask checks the logic of the insert or update task.
 func TestUpsertTask(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	task := models.Task{ID: 101, Description: "Test Description"}
 	typeID := 5
 
@@ -204,7 +203,7 @@ func TestUpsertTask(t *testing.T) {
 // TestUpdateTaskExecutors checks for updates to task executors.
 func TestUpdateTaskExecutors(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	taskID := 101
 	executors := []string{"Executor1", "Executor2"}
 
@@ -286,7 +285,7 @@ func TestUpdateTaskExecutors(t *testing.T) {
 // This test checks the correct orchestration of other method calls.
 func TestSaveTaskData(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	task := models.Task{
 		ID:        101,
 		Type:      "NewType",

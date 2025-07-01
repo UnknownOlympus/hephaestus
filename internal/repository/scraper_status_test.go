@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"context"
 	"regexp"
 	"testing"
 	"time"
@@ -30,7 +29,7 @@ func TestSaveLastProcessesDate_Success(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta(query)).WithArgs(timeNow).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	repo := repository.NewStatusRepository(mock)
-	if err = repo.SaveProcessedDate(context.Background(), timeNow); err != nil {
+	if err = repo.SaveProcessedDate(t.Context(), timeNow); err != nil {
 		t.Errorf("error was not expected while inserting query: %v", err)
 	}
 
@@ -55,7 +54,7 @@ func TestLastProcessedDate_QueryError(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta(query)).WithArgs(timeNow).WillReturnError(assert.AnError)
 
 	repo := repository.NewStatusRepository(mock)
-	if err = repo.SaveProcessedDate(context.Background(), timeNow); err == nil {
+	if err = repo.SaveProcessedDate(t.Context(), timeNow); err == nil {
 		t.Errorf("error was expected, but received nil")
 	}
 
@@ -79,7 +78,7 @@ func TestGetLastProcessedDate_Success(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WillReturnRows(expectedRows)
 
 	repo := repository.NewStatusRepository(mock)
-	actualTime, err := repo.GetLastProcessedDate(context.Background())
+	actualTime, err := repo.GetLastProcessedDate(t.Context())
 
 	require.NoError(t, err)
 	assert.Equal(t, expectedTime, actualTime)
@@ -100,7 +99,7 @@ func TestGetLastProcessedDate_QueryError(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WillReturnError(assert.AnError)
 
 	repo := repository.NewStatusRepository(mock)
-	_, err = repo.GetLastProcessedDate(context.Background())
+	_, err = repo.GetLastProcessedDate(t.Context())
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get last processed date from table last_processed_date")

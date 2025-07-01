@@ -1,7 +1,6 @@
 package parser_test
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -146,7 +145,7 @@ func TestParseTasksByDate(t *testing.T) {
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
 	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
 
-	tasks, err := taskParser.ParseTasksByDate(context.Background(), testDate)
+	tasks, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 
 	require.NoError(t, err)
 	// We expect 3 tasks because one of them has invalid data but does not cause an error
@@ -203,7 +202,7 @@ func TestParseTaskTypes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	taskTypes, err := parser.ParseTaskTypes(context.Background(), server.Client(), server.URL)
+	taskTypes, err := parser.ParseTaskTypes(t.Context(), server.Client(), server.URL)
 
 	require.NoError(t, err)
 	// The function makes 3 queries, each returning 2 task types. Total 3 * 2 = 6
@@ -295,7 +294,7 @@ func TestParseTasksbyDate_CompletedResponseError(t *testing.T) {
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
 	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
 
-	_, err := taskParser.ParseTasksByDate(context.Background(), testDate)
+	_, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 	require.Error(t, err)
 	require.ErrorIs(t, err, parser.ErrScrapeTask)
 	assert.ErrorContains(t, err, "failed to get html response")
@@ -317,7 +316,7 @@ func TestParseTasksbyDate_UncompletedResponseError(t *testing.T) {
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
 	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
 
-	_, err := taskParser.ParseTasksByDate(context.Background(), testDate)
+	_, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 	require.Error(t, err)
 	require.ErrorIs(t, err, parser.ErrScrapeTask)
 	assert.ErrorContains(t, err, "failed to get html response")
@@ -331,7 +330,7 @@ func TestParseTaskTypes_ResponseError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := parser.ParseTaskTypes(context.Background(), server.Client(), server.URL)
+	_, err := parser.ParseTaskTypes(t.Context(), server.Client(), server.URL)
 	require.Error(t, err)
 	require.ErrorIs(t, err, parser.ErrScrapeTask)
 	assert.ErrorContains(t, err, "failed to get response which should retrieve task types")

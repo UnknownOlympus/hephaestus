@@ -12,17 +12,17 @@ import (
 func main() {
 	cfg := config.MustLoad()
 
-	dbpool, err := repository.NewDatabase(
+	dbpool, dbErr := repository.NewDatabase(
 		cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Dbname)
-	if err != nil {
-		log.Fatalf("Failed to connect to DB: %v", err)
+	if dbErr != nil {
+		log.Fatalf("Failed to connect to DB: %v", dbErr)
 	}
-	defer dbpool.Close()
 
 	dtb := stdlib.OpenDBFromPool(dbpool)
-	if err := goose.Up(dtb, "migrations"); err != nil {
-		log.Fatal(err)
+	if migrationErr := goose.Up(dtb, "migrations"); migrationErr != nil {
+		log.Fatal(migrationErr)
 	}
+	defer dbpool.Close()
 
 	log.Println("✅ Migrations applied successfully")
 }

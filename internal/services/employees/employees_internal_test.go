@@ -1,7 +1,6 @@
 package employees
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"io"
@@ -55,7 +54,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		staffService := NewStaff(logger, repoMock)
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// --- Mock Expectations ---
 		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
@@ -86,7 +85,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		staffService := NewStaff(logger, repoMock)
-		ctx := context.Background()
+		ctx := t.Context()
 		parseError := errors.New("failed to parse")
 
 		parserMock.On("ParseEmployees", mock.Anything).Return(nil, parseError)
@@ -104,7 +103,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		staffService := NewStaff(logger, repoMock)
-		ctx := context.Background()
+		ctx := t.Context()
 		updateError := errors.New("failed to update")
 
 		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
@@ -128,7 +127,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		staffService := NewStaff(logger, repoMock)
-		ctx := context.Background()
+		ctx := t.Context()
 		saveError := errors.New("failed to save")
 
 		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
@@ -153,7 +152,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 func TestFixInvalidEmail(t *testing.T) {
 	t.Parallel()
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("all emails are valid", func(t *testing.T) {
 		t.Parallel()
@@ -197,7 +196,7 @@ func TestNewStaff(t *testing.T) {
 
 func TestIsEmployeeExists(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("exists", func(t *testing.T) {
 		t.Parallel()

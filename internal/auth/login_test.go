@@ -95,7 +95,7 @@ func TestLogin(t *testing.T) {
 					t.Log(writer, "Login successful")
 				}
 			},
-			ctx:      context.Background(),
+			ctx:      t.Context(),
 			username: "testuser",
 			password: "testpass",
 			baseURL:  "http://example.com",
@@ -104,7 +104,7 @@ func TestLogin(t *testing.T) {
 		{
 			name:               "error creating new request - invalid URL",
 			loginURLOverride:   "http://invalid url bla bla bla",
-			ctx:                context.Background(),
+			ctx:                t.Context(),
 			username:           "testuser",
 			password:           "testpass",
 			baseURL:            "http://example.com",
@@ -118,7 +118,7 @@ func TestLogin(t *testing.T) {
 					return nil, errors.New("simulated network error")
 				},
 			},
-			ctx:                context.Background(),
+			ctx:                t.Context(),
 			username:           "testuser",
 			password:           "testpass",
 			baseURL:            "http://example.com",
@@ -133,7 +133,7 @@ func TestLogin(t *testing.T) {
 					t.Log(w, "not authorized")
 				}
 			},
-			ctx:                   context.Background(),
+			ctx:                   t.Context(),
 			username:              "testuser",
 			password:              "testpass",
 			baseURL:               "http://example.com",
@@ -152,7 +152,7 @@ func TestLogin(t *testing.T) {
 					}, nil
 				},
 			},
-			ctx:                context.Background(),
+			ctx:                t.Context(),
 			username:           "testuser",
 			password:           "testpass",
 			baseURL:            "http://example.com",
@@ -167,7 +167,7 @@ func TestLogin(t *testing.T) {
 				}
 			},
 			ctx: func() context.Context {
-				c, cancel := context.WithCancel(context.Background())
+				c, cancel := context.WithCancel(t.Context())
 				cancel() // cancel immediately
 				return c
 			}(),
@@ -195,7 +195,7 @@ func TestLogin(t *testing.T) {
 			},
 			ctx: func() context.Context {
 				// timeout shorter than simulated transport delay
-				c, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+				c, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
 				_ = cancel
 				return c
 			}(),
@@ -273,7 +273,7 @@ func TestRetryLogin_Success(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	err := auth.RetryLogin(context.Background(), logger, server.Client(), server.URL, server.URL, "test", "te")
+	err := auth.RetryLogin(t.Context(), logger, server.Client(), server.URL, server.URL, "test", "te")
 	assert.NoError(t, err)
 }
 
@@ -289,7 +289,7 @@ func TestRetryLogin_Error(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	err := auth.RetryLogin(context.Background(), logger, server.Client(), server.URL, server.URL, "test", "te")
+	err := auth.RetryLogin(t.Context(), logger, server.Client(), server.URL, server.URL, "test", "te")
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "failed to login after multiple retries")
 }
