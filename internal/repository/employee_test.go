@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"context"
 	"regexp"
 	"testing"
 
@@ -47,7 +46,7 @@ func TestSaveEmployee_QueryError(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.SaveEmployee(
-		context.Background(),
+		t.Context(),
 		expectedID,
 		expectedFullname,
 		expectedShortName,
@@ -85,7 +84,7 @@ func TestSaveEmployee_Success(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.SaveEmployee(
-		context.Background(),
+		t.Context(),
 		expectedID,
 		expectedFullname,
 		expectedShortName,
@@ -123,7 +122,7 @@ func TestUpdateEmployee_QueryError(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.UpdateEmployee(
-		context.Background(),
+		t.Context(),
 		expectedID,
 		expectedFullname,
 		expectedShortName,
@@ -161,7 +160,7 @@ func TestUpdateEmployee_Success(t *testing.T) {
 
 	repo := repository.NewEmployeeRepository(mock)
 	err = repo.UpdateEmployee(
-		context.Background(),
+		t.Context(),
 		expectedID,
 		expectedFullname,
 		expectedShortName,
@@ -195,7 +194,7 @@ func TestGetEmployeeByID_QueryError(t *testing.T) {
 		WillReturnError(assert.AnError)
 
 	repo := repository.NewEmployeeRepository(mock)
-	actualEmpployee, err := repo.GetEmployeeByID(context.Background(), expectedEmployee.ID)
+	actualEmpployee, err := repo.GetEmployeeByID(t.Context(), expectedEmployee.ID)
 
 	require.Error(t, err)
 	require.EqualError(t, err, "failed to get employee by id: "+assert.AnError.Error())
@@ -229,7 +228,7 @@ func TestGetEmployeeByID_Success(t *testing.T) {
 		WillReturnRows(expectedRows)
 
 	repo := repository.NewEmployeeRepository(mock)
-	actualEmpployee, err := repo.GetEmployeeByID(context.Background(), expEmployee.ID)
+	actualEmpployee, err := repo.GetEmployeeByID(t.Context(), expEmployee.ID)
 
 	require.NoError(t, err)
 	assert.IsType(t, models.Employee{}, actualEmpployee)

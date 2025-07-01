@@ -1,16 +1,5 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TABLE IF NOT EXISTS employees (
-		id int PRIMARY KEY,
-		fullname VARCHAR(255) NOT NULL,
-        shortname VARCHAR(64) NOT NULL,
-		position VARCHAR(255),
-        email VARCHAR(255) UNIQUE,
-		phone VARCHAR(255),
-		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS scraper_status (
 		id SERIAL PRIMARY KEY,
 		last_processed_date DATE NOT NULL,
@@ -21,6 +10,8 @@ CREATE TABLE IF NOT EXISTS task_types (
     type_id SERIAL PRIMARY KEY,
     type_name VARCHAR(50) UNIQUE NOT NULL
 );
+
+SET datestyle = dmy;
 
 CREATE TABLE IF NOT EXISTS tasks (
     task_id INTEGER PRIMARY KEY,
@@ -50,7 +41,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER set_timestamp
+CREATE OR REPLACE TRIGGER set_timestamp
 BEFORE UPDATE ON tasks
 FOR EACH ROW
 EXECUTE PROCEDURE update_timestamp();
@@ -64,5 +55,4 @@ DROP TABLE IF EXISTS task_executors;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS request_types;
 DROP TABLE IF EXISTS scraper_status;
-DROP TABLE IF EXISTS employees;
 -- +goose StatementEnd

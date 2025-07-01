@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/PuerkitoBio/goquery"
@@ -18,19 +19,38 @@ import (
 
 var ErrScrapeTask = errors.New("failed to scrape tasks")
 
-func ParseTasksByDate(
-	ctx context.Context,
-	log *slog.Logger,
-	client *http.Client,
-	date time.Time,
-	destURL string,
-) ([]models.Task, error) {
+type parserConfig struct {
+	id          string
+	createdAt   string
+	closedAt    string
+	address     string
+	customer    string
+	taskType    string
+	description string
+	executors   string
+	comments    string
+}
+
+type TaskParser struct {
+	client  *http.Client
+	log     *slog.Logger
+	destURL string
+}
+
+type TaskInterface interface {
+	ParseTasksByDate(ctx context.Context, date time.Time) ([]models.Task, error)
+}
+
+func NewTaskParser(client *http.Client, log *slog.Logger, destURL string) *TaskParser {
+	return &TaskParser{client: client, log: log, destURL: destURL}
+}
+
+func (tp *TaskParser) ParseTasksByDate(ctx context.Context, date time.Time) ([]models.Task, error) {
 	data := url.Values{}
 
 	// Set data payload
 	data.Set("core_section", "task_list")
 	data.Set("filter_selector0", "task_state")
-	data.Set("task_state0_value", "2")
 	data.Set("filter_selector1", "task_group")
 	data.Set("task_group1_value", "3")
 	data.Set("filter_selector2", "date_update")
@@ -38,13 +58,41 @@ func ParseTasksByDate(
 	data.Set("date_update2_date1", date.Format("02.01.2006"))
 	data.Set("date_update2_date2", date.Format("02.01.2006"))
 
-	resp, err := GetHTMLResponse(ctx, client, &data, destURL)
+	completedTasks, err := tp.parseCompletedTasks(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse completed tasks: %w", err)
+	}
+
+	uncompletedTasks, err := tp.parseUncompletedTasks(ctx, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse uncompleted tasks: %w", err)
+	}
+
+	return append(completedTasks, uncompletedTasks...), nil
+}
+
+func (tp *TaskParser) parseCompletedTasks(ctx context.Context, data url.Values) ([]models.Task, error) {
+	data.Set("task_state0_value", "2")
+
+	resp, err := GetHTMLResponse(ctx, tp.client, &data, tp.destURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get html response: %w", err)
 	}
 	defer resp.Body.Close()
 
-	return parseTasksFromBody(resp.Body, log)
+	return tp.parseTasksFromBody(resp.Body, true)
+}
+
+func (tp *TaskParser) parseUncompletedTasks(ctx context.Context, data url.Values) ([]models.Task, error) {
+	data.Set("task_state0_value", "1")
+
+	resp, err := GetHTMLResponse(ctx, tp.client, &data, tp.destURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get html response: %w", err)
+	}
+	defer resp.Body.Close()
+
+	return tp.parseTasksFromBody(resp.Body, false)
 }
 
 func ParseTaskTypes(ctx context.Context, client *http.Client, destURL string) ([]string, error) {
@@ -93,11 +141,43 @@ func parseTaskTypes(in io.ReadCloser) ([]string, error) {
 	return taskTypes, nil
 }
 
-func parseTasksFromBody(in io.ReadCloser, log *slog.Logger) ([]models.Task, error) {
+func (tp *TaskParser) parseTasksFromBody(inp io.ReadCloser, isCompleted bool) ([]models.Task, error) {
 	var tasks []models.Task
 	var err error
+	var parseErrors []error
+	var config parserConfig
 
-	doc, err := goquery.NewDocumentFromReader(in)
+	completedTasksConfig := parserConfig{
+		id:          "td:nth-child(7) a",
+		createdAt:   "td:nth-child(8)",
+		closedAt:    "td:nth-child(9)",
+		address:     "td:nth-child(10)",
+		customer:    "td:nth-child(11)",
+		taskType:    "td:nth-child(13)",
+		description: "td:nth-child(13) .div_journal_opis",
+		executors:   "td:nth-child(14)",
+		comments:    "td:nth-child(5)",
+	}
+
+	activeTasksConfig := parserConfig{
+		id:          "td:nth-child(7) a",
+		createdAt:   "td:nth-child(8)",
+		closedAt:    "",
+		address:     "td:nth-child(9)",
+		customer:    "td:nth-child(10)",
+		taskType:    "td:nth-child(12)",
+		description: "td:nth-child(12) .div_journal_opis",
+		executors:   "td:nth-child(13)",
+		comments:    "td:nth-child(5)",
+	}
+
+	if isCompleted {
+		config = completedTasksConfig
+	} else {
+		config = activeTasksConfig
+	}
+
+	doc, err := goquery.NewDocumentFromReader(inp)
 	if err != nil {
 		return nil, fmt.Errorf("data cannot be parsed as HTML: %w", err)
 	}
@@ -105,49 +185,49 @@ func parseTasksFromBody(in io.ReadCloser, log *slog.Logger) ([]models.Task, erro
 	doc.Find(`tr[tag^="row_"]`).Each(func(_ int, row *goquery.Selection) {
 		task := models.Task{}
 
-		task.ID, err = strconv.Atoi(strings.TrimSpace(row.Find("td:nth-child(7) a").Text()))
+		task.ID, err = extractInt(row, config.id)
 		if err != nil {
-			log.Debug("Failed to convert task `ID` string to integer type", "error", err)
+			tp.log.Debug("Failed to convert task `ID` string to integer type", "error", err)
+			parseErrors = append(parseErrors, fmt.Errorf("failed to parse task ID: %w", err))
+			return
 		}
 
-		task.CreatedAt, err = time.Parse(
-			"02.01.2006", strings.TrimSpace(row.Find("td:nth-child(8)").Contents().First().Text()),
-		)
+		task.CreatedAt, err = extractDate(row, config.createdAt, "02.01.2006")
 		if err != nil {
-			log.Debug("Failed to convert string createdAt to go type time.Time", "error", err)
+			tp.log.Debug("Failed to convert string createdAt to go type time.Time", "id", task.ID, "error", err)
+			parseErrors = append(parseErrors, fmt.Errorf("task ID %d: failed to parse CreatedAt: %w", task.ID, err))
 		}
-		task.ClosedAt, err = time.Parse(
-			"02.01.2006", strings.TrimSpace(row.Find("td:nth-child(9)").Contents().First().Text()),
-		)
-		if err != nil {
-			log.Debug("Failed to convert string closedAt to go type time.Time", "error", err)
-		}
-
-		task.Address = strings.TrimSpace(row.Find("td:nth-child(10)").Text())
-
-		customerInfo, errCustomer := row.Find("td:nth-child(11)").Html()
-		if errCustomer != nil {
-			log.Debug("Failed to get customer info", "error", err)
+		if isCompleted {
+			task.ClosedAt, err = extractDate(row, config.closedAt, "02.01.2006")
+			if err != nil {
+				tp.log.Debug("Failed to convert string closedAt to go type time.Time", "id", task.ID, "error", err)
+				parseErrors = append(parseErrors, fmt.Errorf("task ID %d: failed to parse ClosedAt: %w", task.ID, err))
+			}
 		}
 
-		task.CustomerName, task.CustomerLogin = ParseCustomerInfo(customerInfo, log)
-		task.Type = strings.TrimSpace(row.Find("td:nth-child(13) b").First().Text())
-		task.Description = strings.TrimSpace(row.Find("td:nth-child(13) .div_journal_opis").Text())
-
-		rawExecutors, errExecutor := row.Find("td:nth-child(14)").Html()
-		if errExecutor != nil {
-			log.Debug("Failed to get executors", "error", err)
+		task.Address = extractText(row, config.address)
+		task.Type = strings.TrimSpace(row.Find(config.taskType + " b").First().Text())
+		task.Description = extractText(row, config.description)
+		if !utf8.ValidString(task.Description) {
+			task.Description = ""
+			tp.log.Warn("Description contains invalid UTF-8 symbols, cleared.", "id", task.ID)
 		}
-		task.Executors = ParseExecutors(rawExecutors)
 
-		rawComments, errComments := row.Find("td:nth-child(5)").Html()
-		if errComments != nil {
-			log.Debug("Failed to get comments", "error", err)
-		}
-		task.Comments = ParseExecutors(rawComments)
+		customerHTML, _ := row.Find(config.customer).Html()
+		task.CustomerName, task.CustomerLogin = ParseCustomerInfo(customerHTML, tp.log)
+
+		executorsHTML, _ := row.Find(config.executors).Html()
+		task.Executors = ParseLinks(executorsHTML)
+
+		commentsHTML, _ := row.Find(config.comments).Html()
+		task.Comments = ParseLinks(commentsHTML)
 
 		tasks = append(tasks, task)
 	})
+
+	if len(parseErrors) > 0 {
+		tp.log.Warn("encountered errors during parsing", "count", len(parseErrors), "first error", parseErrors[0])
+	}
 
 	return tasks, nil
 }
@@ -216,7 +296,7 @@ func ParseCustomerInfo(rawHTML string, log *slog.Logger) (string, string) {
 	return "", ""
 }
 
-func ParseExecutors(rawHTML string) []string {
+func ParseLinks(rawHTML string) []string {
 	var executors []string
 
 	parts := strings.Split(rawHTML, "<br/>")
@@ -231,4 +311,36 @@ func ParseExecutors(rawHTML string) []string {
 	}
 
 	return executors
+}
+
+func extractText(selection *goquery.Selection, selector string) string {
+	return strings.TrimSpace(selection.Find(selector).Text())
+}
+
+func extractInt(selection *goquery.Selection, selector string) (int, error) {
+	text := extractText(selection, selector)
+	if text == "" {
+		return 0, errors.New("element not found or text is empty")
+	}
+
+	integer, err := strconv.Atoi(text)
+	if err != nil {
+		return integer, fmt.Errorf("failed to convert string to integer: %w", err)
+	}
+
+	return integer, nil
+}
+
+func extractDate(selection *goquery.Selection, selector string, layout string) (time.Time, error) {
+	text := strings.TrimSpace(selection.Find(selector).Contents().First().Text())
+	if text == "" {
+		return time.Time{}, errors.New("element not found or text is empty")
+	}
+
+	date, err := time.Parse(layout, text)
+	if err != nil {
+		return date, fmt.Errorf("faile to parse date from string: %w", err)
+	}
+
+	return date, nil
 }

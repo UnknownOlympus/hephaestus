@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func TestNewDatabase_Success(t *testing.T) {
 
 	var err error
 
-	ctx := context.Background()
+	ctx := t.Context()
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:16-alpine",
 		postgres.WithDatabase("testdb"),

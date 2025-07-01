@@ -1,7 +1,6 @@
 package parser_test
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,11 +15,13 @@ import (
 )
 
 // HTML mock for the task page.
-const tasksHTML = `
+const completedTasksHTML = `
 <table>
     <tbody>
         <tr tag="row_12345">
-            <td></td><td></td><td></td><td></td>
+            <td></td>
+			<td>Scheduled work</td>
+			<td></td><td></td>
             <td>Comment 1<br/>Comment 2</td>
             <td></td>
             <td><a>12345</a></td>
@@ -33,7 +34,9 @@ const tasksHTML = `
             <td>Executor 1<br/>Executor 2<i>(additional)</i></td>
         </tr>
         <tr tag="row_12346">
-            <td></td><td></td><td></td><td></td>
+            <td></td>
+			<td>Emergency work</td>
+			<td></td><td></td>
             <td></td>
             <td></td>
             <td><a>12346</a></td>
@@ -44,6 +47,59 @@ const tasksHTML = `
             <td></td>
             <td><b>Emergency work</b><div class="div_journal_opis">Other description</div></td>
             <td>Executor 1</td>
+        </tr>
+		<tr tag="row_invalid">
+			<td></td>
+			<td>Scheduled work</td>
+			<td></td><td></td>
+            <td></td>
+            <td></td>
+            <td><a>not-an-integer</a></td>
+            <td>not-a-date</td>
+            <td>not-a-date</td>
+            <td></td><td></td><td></td><td></td><td></td>
+        </tr>
+		<tr tag="row_invalid">
+            <td></td><td></td><td></td><td></td>
+            <td></td>
+            <td></td>
+            <td><a></a></td>
+            <td>not-a-date</td>
+            <td>not-a-date</td>
+            <td></td><td></td><td></td><td></td><td></td>
+        </tr>
+        <tr tag="row_Invalid">
+            <td></td><td></td><td></td><td></td>
+            <td></td>
+            <td></td>
+            <td><a>12346</a></td>
+            <td></td>
+            <td>asdasdasd</td>
+            <td>Central str, 5</td>
+            <td>only client name</td>
+            <td></td>
+            <td><b>Emergency work</b><div class="div_journal_opis">Other �description</div></td>
+            <td>Executor 1</td>
+        </tr>
+    </tbody>
+</table>`
+
+const uncompletedTasksHTML = `
+<table>
+    <tbody>
+        <tr tag="row_12345">
+			<td></td>
+			<td>Scheduled work</td>
+			<td></td><td></td>
+            <td>Comment 1<br/>Comment 2</td>
+            <td></td>
+            <td><a>12345</a></td>
+            <td>01.06.2025</td>
+            <td>Test street, 1</td>
+            <td><a href="#">Test Client - testlogin</a></td>
+            <td></td>
+            <td><b>Scheduled work</b><div class="div_journal_opis">Task description</div></td>
+            <td>Executor 1<br/>Executor 2<i>(additional)</i></td>
         </tr>
 		<tr tag="row_invalid">
             <td></td><td></td><td></td><td></td>
@@ -77,18 +133,23 @@ func TestParseTasksByDate(t *testing.T) {
 		assert.Equal(t, "07.06.2025", r.URL.Query().Get("date_update2_date1"))
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(tasksHTML))
+		if r.URL.Query().Get("task_state0_value") == "2" {
+			_, _ = w.Write([]byte(completedTasksHTML))
+		} else {
+			_, _ = w.Write([]byte(uncompletedTasksHTML))
+		}
 	}))
 	defer server.Close()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil)) // Using default logger
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
+	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
 
-	tasks, err := parser.ParseTasksByDate(context.Background(), logger, server.Client(), testDate, server.URL)
+	tasks, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 
 	require.NoError(t, err)
 	// We expect 3 tasks because one of them has invalid data but does not cause an error
-	require.Len(t, tasks, 3, "3 tasks must be found, including the invalid one")
+	require.Len(t, tasks, 4, "4 tasks must be found")
 
 	// Checking the first, fully completed task
 	task1 := tasks[0]
@@ -111,9 +172,17 @@ func TestParseTasksByDate(t *testing.T) {
 	assert.Equal(t, []string{"Executor 1"}, task2.Executors)
 
 	// Verify that invalid data did not cause a crash but created empty fields
-	task3 := tasks[2]
-	assert.Equal(t, 0, task3.ID)
-	assert.True(t, task3.CreatedAt.IsZero())
+	task3 := tasks[3]
+	assert.Equal(t, 12345, task3.ID)
+	assert.Equal(t, "01.06.2025", task3.CreatedAt.Format("02.01.2006"))
+	assert.Equal(t, "02.06.2025", task1.ClosedAt.Format("02.01.2006"))
+	assert.Equal(t, "Test street, 1", task3.Address)
+	assert.Equal(t, "Test Client", task3.CustomerName)
+	assert.Equal(t, "testlogin", task3.CustomerLogin)
+	assert.Equal(t, "Scheduled work", task3.Type)
+	assert.Equal(t, "Task description", task3.Description)
+	assert.Equal(t, []string{"Comment 1", "Comment 2"}, task3.Comments)
+	assert.Equal(t, []string{"Executor 1", "Executor 2"}, task3.Executors)
 }
 
 // TestParseTaskTypes checks for receipt of task types.
@@ -133,7 +202,7 @@ func TestParseTaskTypes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	taskTypes, err := parser.ParseTaskTypes(context.Background(), server.Client(), server.URL)
+	taskTypes, err := parser.ParseTaskTypes(t.Context(), server.Client(), server.URL)
 
 	require.NoError(t, err)
 	// The function makes 3 queries, each returning 2 task types. Total 3 * 2 = 6
@@ -177,7 +246,7 @@ func TestParseExecutors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.expected, parser.ParseExecutors(tc.rawHTML))
+			assert.Equal(t, tc.expected, parser.ParseLinks(tc.rawHTML))
 		})
 	}
 }
@@ -213,7 +282,7 @@ func TestParseCustomerInfo(t *testing.T) {
 	})
 }
 
-func TestParseTasksbyDate_ResponseError(t *testing.T) {
+func TestParseTasksbyDate_CompletedResponseError(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -223,8 +292,31 @@ func TestParseTasksbyDate_ResponseError(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil)) // Using default logger
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
+	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
 
-	_, err := parser.ParseTasksByDate(context.Background(), logger, server.Client(), testDate, server.URL)
+	_, err := taskParser.ParseTasksByDate(t.Context(), testDate)
+	require.Error(t, err)
+	require.ErrorIs(t, err, parser.ErrScrapeTask)
+	assert.ErrorContains(t, err, "failed to get html response")
+}
+
+func TestParseTasksbyDate_UncompletedResponseError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("task_state0_value") == "2" {
+			_, _ = w.Write([]byte(completedTasksHTML))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer server.Close()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil)) // Using default logger
+	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
+	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
+
+	_, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 	require.Error(t, err)
 	require.ErrorIs(t, err, parser.ErrScrapeTask)
 	assert.ErrorContains(t, err, "failed to get html response")
@@ -238,7 +330,7 @@ func TestParseTaskTypes_ResponseError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := parser.ParseTaskTypes(context.Background(), server.Client(), server.URL)
+	_, err := parser.ParseTaskTypes(t.Context(), server.Client(), server.URL)
 	require.Error(t, err)
 	require.ErrorIs(t, err, parser.ErrScrapeTask)
 	assert.ErrorContains(t, err, "failed to get response which should retrieve task types")

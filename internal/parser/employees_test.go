@@ -1,7 +1,6 @@
 package parser_test
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -107,7 +106,7 @@ func TestParseEmployees_Success(t *testing.T) {
 	defer ts.Close()
 
 	eparser := parser.NewEmployeeParser(ts.Client(), ts.URL)
-	employees, err := eparser.ParseEmployees(context.Background())
+	employees, err := eparser.ParseEmployees(t.Context())
 	require.NoError(t, err)
 	require.Len(t, employees, 3, "Expected sum of active and terminated employees")
 
@@ -161,7 +160,7 @@ func TestParseEmployees_Failures(t *testing.T) {
 		defer server.Close()
 
 		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
-		_, err := eparser.ParseEmployees(context.Background())
+		_, err := eparser.ParseEmployees(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse staff")
 	})
@@ -182,7 +181,7 @@ func TestParseEmployees_Failures(t *testing.T) {
 		defer server.Close()
 
 		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
-		_, err := eparser.ParseEmployees(context.Background())
+		_, err := eparser.ParseEmployees(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse dismissed staff")
 	})
@@ -207,7 +206,7 @@ func TestParseEmployees_Failures(t *testing.T) {
 		defer server.Close()
 
 		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
-		_, err := eparser.ParseEmployees(context.Background())
+		_, err := eparser.ParseEmployees(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse staff short names")
 	})
@@ -232,7 +231,7 @@ func TestParseEmployees_Failures(t *testing.T) {
 		defer server.Close()
 
 		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
-		_, err := eparser.ParseEmployees(context.Background())
+		_, err := eparser.ParseEmployees(t.Context())
 		require.NoError(t, err)
 	})
 }
@@ -277,7 +276,7 @@ func TestParseEmployees_HTTPRequestError(t *testing.T) {
 			return nil, http.ErrHandlerTimeout // Example error
 		}),
 	}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	eparser := parser.NewEmployeeParser(client, "http://example.com")
 	_, err := eparser.ParseEmployees(ctx)
@@ -292,7 +291,7 @@ func TestParseEmployees_HTTPRequestError(t *testing.T) {
 func TestParseEmployees_InvalidURL(t *testing.T) {
 	t.Parallel()
 	client := &http.Client{}
-	ctx := context.Background()
+	ctx := t.Context()
 
 	eparser := parser.NewEmployeeParser(client, "://invalid-url")
 	_, err := eparser.ParseEmployees(ctx)
