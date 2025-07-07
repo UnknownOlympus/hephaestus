@@ -21,6 +21,12 @@ default: help
 help:
 	@echo "Usage: make <build|test-coverage>"
 
+.PHONY: lint
+lint-coverage:
+	@echo
+	@echo "==> Running linter <=="
+	@ golangci-lint run ./...
+
 .PHONY: test-coverage
 test-coverage:
 	@echo
