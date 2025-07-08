@@ -78,7 +78,11 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 			customer_login = EXCLUDED.customer_login,
 			comments = EXCLUDED.comments,
 			is_closed = EXCLUDED.is_closed,
-			updated_at = CURRENT_TIMESTAMP;
+			updated_at = CURRENT_TIMESTAMP,
+			latitude = NULL,
+			longitude = NULL,
+			geocoding_attempts = 0,
+			geocoding_error = NULL;
 	`
 	_, err := r.db.Exec(ctx, query,
 		task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description,
