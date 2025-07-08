@@ -73,16 +73,28 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 			task_type_id = EXCLUDED.task_type_id,
 			closing_date = EXCLUDED.closing_date,
 			description = EXCLUDED.description,
-			address = EXCLUDED.address,
 			customer_name = EXCLUDED.customer_name,
 			customer_login = EXCLUDED.customer_login,
 			comments = EXCLUDED.comments,
 			is_closed = EXCLUDED.is_closed,
 			updated_at = CURRENT_TIMESTAMP,
-			latitude = NULL,
-			longitude = NULL,
-			geocoding_attempts = 0,
-			geocoding_error = NULL;
+			address = EXCLUDED.address,
+			latitude = CASE
+				WHEN tasks.address IS DISTINCT FROM EXCLUDED.address THEN NULL
+				ELSE tasks.latitude
+			END,
+			longitude = CASE
+				WHEN tasks.address IS DISTINCT FROM EXCLUDED.address THEN NULL
+				ELSE tasks.longitude
+			END,
+			geocoding_attempts = CASE
+				WHEN tasks.address IS DISTINCT FROM EXCLUDED.address THEN 0
+				ELSE tasks.geocoding_attempts
+			END,
+			geocoding_error = CASE
+				WHEN tasks.address IS DISTINCT FROM EXCLUDED.address THEN NULL
+				ELSE tasks.geocoding_error
+			END;
 	`
 	_, err := r.db.Exec(ctx, query,
 		task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description,
