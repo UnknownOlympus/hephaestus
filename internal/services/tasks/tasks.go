@@ -170,7 +170,7 @@ func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time, b
 		return fmt.Errorf("failed to save next processed date '%s': %w", nextDate.Format("02.01.2006"), err)
 	}
 
-	log.DebugContext(ctx, "Successfully processed date", "date", dateToParse.Format("02.01.2006"))
+	log.InfoContext(ctx, "Successfully processed date", "date", dateToParse.Format("02.01.2006"))
 
 	return nil
 }
