@@ -143,7 +143,12 @@ func TestParseTasksByDate(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil)) // Using default logger
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
-	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
+	taskParser := parser.NewTaskParser(
+		server.Client(),
+		logger,
+		metric,
+		server.URL,
+	)
 
 	tasks, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 
@@ -292,7 +297,12 @@ func TestParseTasksbyDate_CompletedResponseError(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil)) // Using default logger
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
-	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
+	taskParser := parser.NewTaskParser(
+		server.Client(),
+		logger,
+		metric,
+		server.URL,
+	)
 
 	_, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 	require.Error(t, err)
@@ -314,7 +324,12 @@ func TestParseTasksbyDate_UncompletedResponseError(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil)) // Using default logger
 	testDate, _ := time.Parse("02.01.2006", "07.06.2025")
-	taskParser := parser.NewTaskParser(server.Client(), logger, server.URL)
+	taskParser := parser.NewTaskParser(
+		server.Client(),
+		logger,
+		metric,
+		server.URL,
+	)
 
 	_, err := taskParser.ParseTasksByDate(t.Context(), testDate)
 	require.Error(t, err)

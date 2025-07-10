@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/PuerkitoBio/goquery"
 )
@@ -21,14 +22,15 @@ type employeeShortname struct {
 type EmployeeParser struct {
 	client  *http.Client
 	destURL string
+	metrics *metrics.Metrics
 }
 
 type EmployeeParserIface interface {
 	ParseEmployees(ctx context.Context) ([]models.Employee, error)
 }
 
-func NewEmployeeParser(client *http.Client, destURL string) EmployeeParserIface {
-	return &EmployeeParser{client: client, destURL: destURL}
+func NewEmployeeParser(client *http.Client, metrics *metrics.Metrics, destURL string) EmployeeParserIface {
+	return &EmployeeParser{client: client, destURL: destURL, metrics: metrics}
 }
 
 func (ep *EmployeeParser) ParseEmployees(ctx context.Context) ([]models.Employee, error) {
@@ -66,7 +68,7 @@ func (ep *EmployeeParser) parseActualStaff(ctx context.Context) ([]models.Employ
 	}
 	defer resp.Body.Close()
 
-	return ParseEmployeeFromBody(resp.Body, tds[0], tds[1], tds[2], tds[3], tds[4])
+	return ParseEmployeeFromBody(resp.Body, ep.metrics, tds[0], tds[1], tds[2], tds[3], tds[4])
 }
 
 func (ep *EmployeeParser) parseDismissedStaff(ctx context.Context) ([]models.Employee, error) {
@@ -82,7 +84,7 @@ func (ep *EmployeeParser) parseDismissedStaff(ctx context.Context) ([]models.Emp
 	}
 	defer resp.Body.Close()
 
-	return ParseEmployeeFromBody(resp.Body, tds[0], tds[1], tds[2], tds[3], tds[4])
+	return ParseEmployeeFromBody(resp.Body, ep.metrics, tds[0], tds[1], tds[2], tds[3], tds[4])
 }
 
 func (ep *EmployeeParser) parseStaffShortNames(ctx context.Context) ([]employeeShortname, error) {
@@ -138,7 +140,7 @@ func updateEmployeeShortNames(employees []models.Employee, shortnames []employee
 	return updatedEmployees
 }
 
-func ParseEmployeeFromBody(in io.ReadCloser,
+func ParseEmployeeFromBody(in io.ReadCloser, metric *metrics.Metrics,
 	tdID, tdFullname, tdPosition, tdEmail, tdPhone int,
 ) ([]models.Employee, error) {
 	var employees []models.Employee
@@ -158,6 +160,7 @@ func ParseEmployeeFromBody(in io.ReadCloser,
 		employee.Phone = strings.TrimSpace(row.Find(fmt.Sprintf("td:nth-child(%d)", tdPhone)).Text())
 
 		employees = append(employees, employee)
+		metric.ItemsParsed.WithLabelValues("employee").Inc()
 	})
 
 	return employees, nil

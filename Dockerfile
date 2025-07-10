@@ -27,6 +27,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /main cmd/main/main.go
 # -- Final stage -- 
 FROM alpine:3
 
+EXPOSE 8080
+
 COPY --from=builder main .
 COPY --from=migrator migrator .
 COPY ./migrations ./migrations

@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/PuerkitoBio/goquery"
 )
@@ -34,6 +35,7 @@ type parserConfig struct {
 type TaskParser struct {
 	client  *http.Client
 	log     *slog.Logger
+	metrics *metrics.Metrics
 	destURL string
 }
 
@@ -41,8 +43,8 @@ type TaskInterface interface {
 	ParseTasksByDate(ctx context.Context, date time.Time) ([]models.Task, error)
 }
 
-func NewTaskParser(client *http.Client, log *slog.Logger, destURL string) *TaskParser {
-	return &TaskParser{client: client, log: log, destURL: destURL}
+func NewTaskParser(client *http.Client, log *slog.Logger, metrics *metrics.Metrics, destURL string) *TaskParser {
+	return &TaskParser{client: client, log: log, destURL: destURL, metrics: metrics}
 }
 
 func (tp *TaskParser) ParseTasksByDate(ctx context.Context, date time.Time) ([]models.Task, error) {
@@ -80,7 +82,7 @@ func (tp *TaskParser) parseCompletedTasks(ctx context.Context, data url.Values) 
 	}
 	defer resp.Body.Close()
 
-	return tp.parseTasksFromBody(resp.Body, true)
+	return tp.parseTasksFromBody(resp.Body, tp.metrics, true)
 }
 
 func (tp *TaskParser) parseUncompletedTasks(ctx context.Context, data url.Values) ([]models.Task, error) {
@@ -92,7 +94,7 @@ func (tp *TaskParser) parseUncompletedTasks(ctx context.Context, data url.Values
 	}
 	defer resp.Body.Close()
 
-	return tp.parseTasksFromBody(resp.Body, false)
+	return tp.parseTasksFromBody(resp.Body, tp.metrics, false)
 }
 
 func ParseTaskTypes(ctx context.Context, client *http.Client, destURL string) ([]string, error) {
@@ -141,7 +143,11 @@ func parseTaskTypes(in io.ReadCloser) ([]string, error) {
 	return taskTypes, nil
 }
 
-func (tp *TaskParser) parseTasksFromBody(inp io.ReadCloser, isCompleted bool) ([]models.Task, error) {
+func (tp *TaskParser) parseTasksFromBody(
+	inp io.ReadCloser,
+	metric *metrics.Metrics,
+	isCompleted bool,
+) ([]models.Task, error) {
 	var tasks []models.Task
 	var err error
 	var parseErrors []error
@@ -223,10 +229,12 @@ func (tp *TaskParser) parseTasksFromBody(inp io.ReadCloser, isCompleted bool) ([
 		task.Comments = ParseLinks(commentsHTML)
 
 		tasks = append(tasks, task)
+		metric.ItemsParsed.WithLabelValues("task").Inc()
 	})
 
 	if len(parseErrors) > 0 {
 		tp.log.Warn("encountered errors during parsing", "count", len(parseErrors), "first error", parseErrors[0])
+		tp.metrics.ParseErrors.WithLabelValues("task").Add(float64(len(parseErrors)))
 	}
 
 	return tasks, nil

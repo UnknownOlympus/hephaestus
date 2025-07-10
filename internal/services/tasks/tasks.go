@@ -11,6 +11,7 @@ import (
 
 	"github.com/Houeta/us-api-provider/internal/auth"
 	"github.com/Houeta/us-api-provider/internal/client"
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/parser"
 	"github.com/Houeta/us-api-provider/internal/repository"
 )
@@ -20,13 +21,15 @@ type TaskService struct {
 	repo       repository.TaskRepoIface
 	statusRepo repository.StatusRepoIface
 	parser     parser.TaskInterface
+	metrics    *metrics.Metrics
 }
 
 func NewTaskService(log *slog.Logger,
 	repo repository.TaskRepoIface,
 	statusRepo repository.StatusRepoIface,
+	metrics *metrics.Metrics,
 ) *TaskService {
-	return &TaskService{log: log, repo: repo, statusRepo: statusRepo}
+	return &TaskService{log: log, repo: repo, statusRepo: statusRepo, metrics: metrics}
 }
 
 func (ts *TaskService) initLogger(opn string) *slog.Logger {
@@ -47,14 +50,16 @@ func (ts *TaskService) Start(
 	var err error
 
 	httpClient := client.CreateHTTPClient(log)
-	ts.parser = parser.NewTaskParser(httpClient, log, baseURL)
+	ts.parser = parser.NewTaskParser(httpClient, log, ts.metrics, baseURL)
 
 	// 1. Login
 	log.InfoContext(ctx, "Attempting login...")
 	if err = auth.RetryLogin(ctx, log, httpClient, loginURL, baseURL, username, password); err != nil {
+		ts.metrics.LoginAttempts.WithLabelValues("failure").Inc()
 		return fmt.Errorf("failed to login: %w", err)
 	}
 	log.InfoContext(ctx, "Login successful.")
+	ts.metrics.LoginAttempts.WithLabelValues("success").Inc()
 
 	// 2. Update task types
 	if err = ts.GetTaskTypes(ctx, httpClient, baseURL); err != nil {
@@ -140,6 +145,11 @@ func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time, b
 	const opn = "Tasks.processDate"
 	log := ts.initLogger(opn)
 
+	startTime := time.Now()
+	defer func() {
+		ts.metrics.RunDuration.WithLabelValues("task").Observe(time.Since(startTime).Seconds())
+	}()
+
 	normalizedDate := time.Date(
 		dateToParse.Year(), dateToParse.Month(), dateToParse.Day(), 0, 0, 0, 0, time.UTC)
 
@@ -147,6 +157,7 @@ func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time, b
 
 	tasks, err := ts.parser.ParseTasksByDate(ctx, normalizedDate)
 	if err != nil {
+		ts.metrics.Runs.WithLabelValues("failure").Inc()
 		return fmt.Errorf(
 			"failed to parse from '%s' for date '%s': %w",
 			baseURL,
@@ -161,16 +172,20 @@ func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time, b
 
 	for _, task := range tasks {
 		if err = ts.repo.SaveTaskData(ctx, task); err != nil {
+			ts.metrics.Runs.WithLabelValues("failure").Inc()
 			return fmt.Errorf("failed to save task '%d' in repository: %w", task.ID, err)
 		}
 	}
 
 	nextDate := dateToParse.AddDate(0, 0, 1)
 	if err = ts.statusRepo.SaveProcessedDate(ctx, nextDate); err != nil {
+		ts.metrics.Runs.WithLabelValues("failure").Inc()
 		return fmt.Errorf("failed to save next processed date '%s': %w", nextDate.Format("02.01.2006"), err)
 	}
 
-	log.DebugContext(ctx, "Successfully processed date", "date", dateToParse.Format("02.01.2006"))
+	log.InfoContext(ctx, "Successfully processed date", "date", dateToParse.Format("02.01.2006"))
+	ts.metrics.Runs.WithLabelValues("success").Inc()
+	ts.metrics.LastSuccessfulRun.WithLabelValues("task").SetToCurrentTime()
 
 	return nil
 }

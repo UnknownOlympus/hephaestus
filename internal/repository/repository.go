@@ -4,11 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/models"
 )
 
 type Repository struct {
-	db Database
+	db      Database
+	metrics *metrics.Metrics
 }
 
 type StatusRepoIface interface {
@@ -16,8 +18,8 @@ type StatusRepoIface interface {
 	GetLastProcessedDate(ctx context.Context) (time.Time, error)
 }
 
-func NewStatusRepository(db Database) StatusRepoIface {
-	return &Repository{db: db}
+func NewStatusRepository(db Database, metrics *metrics.Metrics) StatusRepoIface {
+	return &Repository{db: db, metrics: metrics}
 }
 
 // EmployeeRepoIface represents the interface for interacting with employee data in the repository.
@@ -27,8 +29,8 @@ type EmployeeRepoIface interface {
 	GetEmployeeByID(ctx context.Context, identifier int) (models.Employee, error)
 }
 
-func NewEmployeeRepository(db Database) EmployeeRepoIface {
-	return &Repository{db: db}
+func NewEmployeeRepository(db Database, metrics *metrics.Metrics) EmployeeRepoIface {
+	return &Repository{db: db, metrics: metrics}
 }
 
 // TaskRepoIface represents the interface for interacting with task data in the repository.
@@ -39,6 +41,6 @@ type TaskRepoIface interface {
 	SaveTaskData(ctx context.Context, task models.Task) error
 }
 
-func NewTaskRepository(db Database) TaskRepoIface {
-	return &Repository{db: db}
+func NewTaskRepository(db Database, metrics *metrics.Metrics) TaskRepoIface {
+	return &Repository{db: db, metrics: metrics}
 }

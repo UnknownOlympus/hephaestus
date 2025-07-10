@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/Houeta/us-api-provider/internal/parser"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -76,6 +78,8 @@ const (
 `
 )
 
+var metric = metrics.NewMetrics(prometheus.DefaultRegisterer) //nolint:gochecknoglobals // for test case
+
 func TestParseEmployees_Success(t *testing.T) {
 	t.Parallel()
 	// Create mock http server
@@ -105,7 +109,7 @@ func TestParseEmployees_Success(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	eparser := parser.NewEmployeeParser(ts.Client(), ts.URL)
+	eparser := parser.NewEmployeeParser(ts.Client(), metric, ts.URL)
 	employees, err := eparser.ParseEmployees(t.Context())
 	require.NoError(t, err)
 	require.Len(t, employees, 3, "Expected sum of active and terminated employees")
@@ -159,7 +163,11 @@ func TestParseEmployees_Failures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
+		eparser := parser.NewEmployeeParser(
+			server.Client(),
+			metric,
+			server.URL,
+		)
 		_, err := eparser.ParseEmployees(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse staff")
@@ -180,7 +188,11 @@ func TestParseEmployees_Failures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
+		eparser := parser.NewEmployeeParser(
+			server.Client(),
+			metric,
+			server.URL,
+		)
 		_, err := eparser.ParseEmployees(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse dismissed staff")
@@ -205,7 +217,11 @@ func TestParseEmployees_Failures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
+		eparser := parser.NewEmployeeParser(
+			server.Client(),
+			metric,
+			server.URL,
+		)
 		_, err := eparser.ParseEmployees(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse staff short names")
@@ -230,7 +246,11 @@ func TestParseEmployees_Failures(t *testing.T) {
 		}))
 		defer server.Close()
 
-		eparser := parser.NewEmployeeParser(server.Client(), server.URL)
+		eparser := parser.NewEmployeeParser(
+			server.Client(),
+			metric,
+			server.URL,
+		)
 		_, err := eparser.ParseEmployees(t.Context())
 		require.NoError(t, err)
 	})
@@ -241,7 +261,7 @@ func TestParseEmployeeFromBody(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		reader := io.NopCloser(strings.NewReader(staffHTML))
-		employees, err := parser.ParseEmployeeFromBody(reader, 2, 3, 4, 5, 6)
+		employees, err := parser.ParseEmployeeFromBody(reader, metric, 2, 3, 4, 5, 6)
 
 		require.NoError(t, err)
 		require.Len(t, employees, 2)
@@ -253,7 +273,7 @@ func TestParseEmployeeFromBody(t *testing.T) {
 		t.Parallel()
 		htmlContent := `<table><tr><td>No rows with tag attribute</td></tr></table>`
 		reader := io.NopCloser(strings.NewReader(htmlContent))
-		employees, err := parser.ParseEmployeeFromBody(reader, 1, 2, 3, 4, 5)
+		employees, err := parser.ParseEmployeeFromBody(reader, metric, 1, 2, 3, 4, 5)
 
 		require.NoError(t, err)
 		assert.Empty(t, employees, 0)
@@ -278,7 +298,7 @@ func TestParseEmployees_HTTPRequestError(t *testing.T) {
 	}
 	ctx := t.Context()
 
-	eparser := parser.NewEmployeeParser(client, "http://example.com")
+	eparser := parser.NewEmployeeParser(client, metric, "http://example.com")
 	_, err := eparser.ParseEmployees(ctx)
 	if err == nil {
 		t.Error("Expected an error, but got nil")
@@ -293,7 +313,7 @@ func TestParseEmployees_InvalidURL(t *testing.T) {
 	client := &http.Client{}
 	ctx := t.Context()
 
-	eparser := parser.NewEmployeeParser(client, "://invalid-url")
+	eparser := parser.NewEmployeeParser(client, metric, "://invalid-url")
 	_, err := eparser.ParseEmployees(ctx)
 	if err == nil {
 		t.Error("Expected an error, but got nil")

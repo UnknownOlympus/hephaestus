@@ -4,8 +4,6 @@ on:
   push:
     branches: [ "main", "dev" ]
     tags: ["*"]
-  pull_request:
-    branches: [ "main" ]
 
 jobs:
   lint:
@@ -65,6 +63,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: go
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

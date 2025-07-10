@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/jackc/pgx/v5"
@@ -11,6 +12,11 @@ import (
 
 func (r *Repository) GetOrCreateTaskTypeID(ctx context.Context, typeName string) (int, error) {
 	var typeID int
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		r.metrics.DBQueryDuration.WithLabelValues("get_or_create_task_type_id").Observe(duration)
+	}()
 	err := r.db.QueryRow(ctx, "SELECT type_id FROM task_types WHERE type_name = $1", typeName).Scan(&typeID)
 	if err == nil {
 		return typeID, nil // type is found, return id
@@ -39,6 +45,11 @@ func (r *Repository) GetOrCreateTaskTypeID(ctx context.Context, typeName string)
 }
 
 func (r *Repository) SaveTaskData(ctx context.Context, task models.Task) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		r.metrics.DBQueryDuration.WithLabelValues("save_tasks_data").Observe(duration)
+	}()
 	// 1. Get ID for task type
 	typeID, err := r.GetOrCreateTaskTypeID(ctx, task.Type)
 	if err != nil {
@@ -61,6 +72,11 @@ func (r *Repository) SaveTaskData(ctx context.Context, task models.Task) error {
 }
 
 func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID int) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		r.metrics.DBQueryDuration.WithLabelValues("upsert_task").Observe(duration)
+	}()
 	isClosed := !task.ClosedAt.IsZero()
 
 	query := `
@@ -108,6 +124,11 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 }
 
 func (r *Repository) UpdateTaskExecutors(ctx context.Context, taskID int, executors []string) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		r.metrics.DBQueryDuration.WithLabelValues("update_task_executors").Observe(duration)
+	}()
 	// 1. Delete all executors for this task
 	_, err := r.db.Exec(ctx, "DELETE FROM task_executors WHERE task_id = $1", taskID)
 	if err != nil {
