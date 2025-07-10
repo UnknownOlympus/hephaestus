@@ -5,11 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/repository"
 	"github.com/pashagolub/pgxmock/v4"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var repoMetrics = metrics.NewMetrics(prometheus.DefaultRegisterer) //nolint:gochecknoglobals // for test case
 
 func TestSaveLastProcessesDate_Success(t *testing.T) {
 	t.Parallel()
@@ -28,7 +32,7 @@ func TestSaveLastProcessesDate_Success(t *testing.T) {
 
 	mock.ExpectExec(regexp.QuoteMeta(query)).WithArgs(timeNow).WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
-	repo := repository.NewStatusRepository(mock)
+	repo := repository.NewStatusRepository(mock, repoMetrics)
 	if err = repo.SaveProcessedDate(t.Context(), timeNow); err != nil {
 		t.Errorf("error was not expected while inserting query: %v", err)
 	}
@@ -53,7 +57,7 @@ func TestLastProcessedDate_QueryError(t *testing.T) {
 
 	mock.ExpectExec(regexp.QuoteMeta(query)).WithArgs(timeNow).WillReturnError(assert.AnError)
 
-	repo := repository.NewStatusRepository(mock)
+	repo := repository.NewStatusRepository(mock, repoMetrics)
 	if err = repo.SaveProcessedDate(t.Context(), timeNow); err == nil {
 		t.Errorf("error was expected, but received nil")
 	}
@@ -77,7 +81,7 @@ func TestGetLastProcessedDate_Success(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WillReturnRows(expectedRows)
 
-	repo := repository.NewStatusRepository(mock)
+	repo := repository.NewStatusRepository(mock, repoMetrics)
 	actualTime, err := repo.GetLastProcessedDate(t.Context())
 
 	require.NoError(t, err)
@@ -98,7 +102,7 @@ func TestGetLastProcessedDate_QueryError(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta(query)).WillReturnError(assert.AnError)
 
-	repo := repository.NewStatusRepository(mock)
+	repo := repository.NewStatusRepository(mock, repoMetrics)
 	_, err = repo.GetLastProcessedDate(t.Context())
 
 	require.Error(t, err)

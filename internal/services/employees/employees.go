@@ -15,19 +15,21 @@ import (
 
 	"github.com/Houeta/us-api-provider/internal/auth"
 	"github.com/Houeta/us-api-provider/internal/client"
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/models"
 	"github.com/Houeta/us-api-provider/internal/parser"
 	"github.com/Houeta/us-api-provider/internal/repository"
 )
 
 type Staff struct {
-	log    *slog.Logger
-	repo   repository.EmployeeRepoIface
-	parser parser.EmployeeParserIface
+	log     *slog.Logger
+	repo    repository.EmployeeRepoIface
+	parser  parser.EmployeeParserIface
+	metrics *metrics.Metrics
 }
 
-func NewStaff(log *slog.Logger, repo repository.EmployeeRepoIface) *Staff {
-	return &Staff{log: log, repo: repo}
+func NewStaff(log *slog.Logger, repo repository.EmployeeRepoIface, metrics *metrics.Metrics) *Staff {
+	return &Staff{log: log, repo: repo, metrics: metrics}
 }
 
 func (s *Staff) initLogger(opn string) *slog.Logger {
@@ -46,20 +48,28 @@ func (s *Staff) Start(ctx context.Context, loginURL, baseURL, username, password
 	var err error
 
 	httpClient := client.CreateHTTPClient(log)
-	s.parser = parser.NewEmployeeParser(httpClient, baseURL)
+	s.parser = parser.NewEmployeeParser(httpClient, s.metrics, baseURL)
 
 	// 1. Login
 	log.InfoContext(ctx, "Attempting login...")
 	if err = auth.RetryLogin(ctx, log, httpClient, loginURL, baseURL, username, password); err != nil {
+		s.metrics.LoginAttempts.WithLabelValues("failure").Inc()
 		return fmt.Errorf("failed to login: %w", err)
 	}
 	log.InfoContext(ctx, "Login  successful.")
+	s.metrics.LoginAttempts.WithLabelValues("success").Inc()
 
 	// 2. Catch-up mode
 	log.InfoContext(ctx, "Starting catch-up mode")
+	startTime := time.Now()
 	if err = s.ProcessEmployee(ctx); err != nil {
+		s.metrics.Runs.WithLabelValues("failure").Inc()
+		s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
 		return fmt.Errorf("failed during catch-up process: %w", err)
 	}
+	s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
+	s.metrics.LastSuccessfulRun.WithLabelValues("employee").SetToCurrentTime()
+	s.metrics.Runs.WithLabelValues("success").Inc()
 
 	// 3. Maintainance mode
 	log.InfoContext(ctx, "Starting maintainance mode", "interval", interval.String())
@@ -70,9 +80,15 @@ func (s *Staff) Start(ctx context.Context, loginURL, baseURL, username, password
 		select {
 		case <-ticker.C:
 			log.InfoContext(ctx, "Periodic check triggered.")
+			startTime = time.Now()
 			if err = s.ProcessEmployee(ctx); err != nil {
+				s.metrics.Runs.WithLabelValues("failure").Inc()
+				s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
 				log.ErrorContext(ctx, "Periodic run failed", "error", err)
 			}
+			s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
+			s.metrics.LastSuccessfulRun.WithLabelValues("employee").SetToCurrentTime()
+			s.metrics.Runs.WithLabelValues("success").Inc()
 		case <-ctx.Done():
 			log.InfoContext(ctx, "Service shutting down.")
 			return nil
@@ -97,7 +113,7 @@ func (s *Staff) processEmployeeInternal(pctx context.Context, employeeParser par
 		return fmt.Errorf("failed to parse employee from HTML: %w", err)
 	}
 
-	fixedEmployees := fixInvalidEmail(ctx, log, employees)
+	fixedEmployees := fixInvalidEmail(ctx, log, employees, s.metrics)
 
 	for _, employee := range fixedEmployees {
 		existed, existedEmployee := IsEmployeeExists(ctx, employee.ID, s.repo)
@@ -129,7 +145,12 @@ func (s *Staff) processEmployeeInternal(pctx context.Context, employeeParser par
 	return nil
 }
 
-func fixInvalidEmail(ctx context.Context, log *slog.Logger, employees []models.Employee) []models.Employee {
+func fixInvalidEmail(
+	ctx context.Context,
+	log *slog.Logger,
+	employees []models.Employee,
+	metrics *metrics.Metrics,
+) []models.Employee {
 	var invalidCounter int
 	fixedEmployees := make([]models.Employee, 0, len(employees))
 
@@ -156,6 +177,7 @@ func fixInvalidEmail(ctx context.Context, log *slog.Logger, employees []models.E
 		log.WarnContext(
 			ctx, "Number of employees with no or invalid email addressess. For mode information, enable debug mode",
 			"value", invalidCounter)
+		metrics.EmailsFixed.Add(float64(invalidCounter))
 	}
 
 	return fixedEmployees

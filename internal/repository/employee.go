@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Houeta/us-api-provider/internal/models"
 )
@@ -14,6 +15,11 @@ func (r *Repository) SaveEmployee(
 	identifier int,
 	fullname, shortname, position, email, phone string,
 ) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		r.metrics.DBQueryDuration.WithLabelValues("save_employee").Observe(duration)
+	}()
 	query := `
 		INSERT INTO employees (id, fullname, shortname, position, email, phone)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -34,6 +40,11 @@ func (r *Repository) UpdateEmployee(
 	identifier int,
 	fullname, shortname, position, email, phone string,
 ) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		r.metrics.DBQueryDuration.WithLabelValues("update_employee").Observe(duration)
+	}()
 	query := `
 		UPDATE employees
 		SET fullname = $2, shortname = $3, position = $4, email = $5, phone = $6, updated_at = CURRENT_TIMESTAMP
@@ -52,6 +63,11 @@ func (r *Repository) UpdateEmployee(
 func (r *Repository) GetEmployeeByID(ctx context.Context, identifier int) (models.Employee, error) {
 	var result models.Employee
 
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		r.metrics.DBQueryDuration.WithLabelValues("get_employee_by_id").Observe(duration)
+	}()
 	query := `SELECT id, fullname, shortname, position, email, phone FROM employees WHERE id=$1`
 
 	err := r.db.QueryRow(ctx, query, identifier).Scan(

@@ -7,12 +7,16 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/models"
 	mocks "github.com/Houeta/us-api-provider/mock"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+var appMetrics = metrics.NewMetrics(prometheus.DefaultRegisterer) //nolint:gochecknoglobals // for test case
 
 func TestProcessEmployeeInternal(t *testing.T) {
 	t.Parallel()
@@ -53,7 +57,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock)
+		staffService := NewStaff(logger, repoMock, appMetrics)
 		ctx := t.Context()
 
 		// --- Mock Expectations ---
@@ -84,7 +88,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock)
+		staffService := NewStaff(logger, repoMock, appMetrics)
 		ctx := t.Context()
 		parseError := errors.New("failed to parse")
 
@@ -102,7 +106,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock)
+		staffService := NewStaff(logger, repoMock, appMetrics)
 		ctx := t.Context()
 		updateError := errors.New("failed to update")
 
@@ -126,7 +130,7 @@ func TestProcessEmployeeInternal(t *testing.T) {
 		repoMock := new(mocks.EmployeeRepoIface)
 		parserMock := new(mocks.EmployeeParserIface)
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock)
+		staffService := NewStaff(logger, repoMock, appMetrics)
 		ctx := t.Context()
 		saveError := errors.New("failed to save")
 
@@ -159,7 +163,7 @@ func TestFixInvalidEmail(t *testing.T) {
 		employeesList := []models.Employee{
 			{FullName: "Valid User", Email: "valid@example.com"},
 		}
-		fixed := fixInvalidEmail(ctx, logger, employeesList)
+		fixed := fixInvalidEmail(ctx, logger, employeesList, appMetrics)
 		assert.Equal(t, "valid@example.com", fixed[0].Email)
 	})
 
@@ -168,7 +172,7 @@ func TestFixInvalidEmail(t *testing.T) {
 		employeesList := []models.Employee{
 			{FullName: "Empty Email User", Email: ""},
 		}
-		fixed := fixInvalidEmail(ctx, logger, employeesList)
+		fixed := fixInvalidEmail(ctx, logger, employeesList, appMetrics)
 		assert.NotEmpty(t, fixed[0].Email)
 		isEmail, _ := ValidateEmployee(fixed[0].Email, "")
 		assert.True(t, isEmail)
@@ -179,7 +183,7 @@ func TestFixInvalidEmail(t *testing.T) {
 		employeeList := []models.Employee{
 			{FullName: "Invalid User", Email: "invalid.email"},
 		}
-		fixed := fixInvalidEmail(ctx, logger, employeeList)
+		fixed := fixInvalidEmail(ctx, logger, employeeList, appMetrics)
 		assert.NotEmpty(t, fixed[0].Email)
 		isEmail, _ := ValidateEmployee(fixed[0].Email, "")
 		assert.True(t, isEmail)
@@ -190,7 +194,7 @@ func TestNewStaff(t *testing.T) {
 	t.Parallel()
 	logger := slog.Default()
 	mockRepo := new(mocks.EmployeeRepoIface)
-	s := NewStaff(logger, mockRepo)
+	s := NewStaff(logger, mockRepo, appMetrics)
 	assert.NotNil(t, s)
 }
 

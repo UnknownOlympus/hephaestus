@@ -11,9 +11,13 @@ import (
 	"time"
 
 	"github.com/Houeta/us-api-provider/internal/config"
+	"github.com/Houeta/us-api-provider/internal/metrics"
 	"github.com/Houeta/us-api-provider/internal/repository"
+	"github.com/Houeta/us-api-provider/internal/server"
 	"github.com/Houeta/us-api-provider/internal/services/employees"
 	"github.com/Houeta/us-api-provider/internal/services/tasks"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
 const (
@@ -26,7 +30,7 @@ const (
 func main() {
 	var err error
 	var wgr sync.WaitGroup
-	delta := 2
+	delta := 3
 	serviceDealyInSeconds := 3
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -34,6 +38,12 @@ func main() {
 	cfg := config.MustLoad()
 
 	logger := setupLogger(cfg.Env)
+
+	// Create a separate registry for metrics with exemplar
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewGoCollector())
+	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	appMetrics := metrics.NewMetrics(reg)
 
 	dtb, err := repository.NewDatabase(
 		cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Dbname)
@@ -43,13 +53,19 @@ func main() {
 	defer stop()
 	defer dtb.Close()
 
-	employeeRepo := repository.NewEmployeeRepository(dtb)
-	taskRepo := repository.NewTaskRepository(dtb)
-	statRepo := repository.NewStatusRepository(dtb)
-	staff := employees.NewStaff(logger, employeeRepo)
-	taskService := tasks.NewTaskService(logger, taskRepo, statRepo)
+	employeeRepo := repository.NewEmployeeRepository(dtb, appMetrics)
+	taskRepo := repository.NewTaskRepository(dtb, appMetrics)
+	statRepo := repository.NewStatusRepository(dtb, appMetrics)
+	staff := employees.NewStaff(logger, employeeRepo, appMetrics)
+	taskService := tasks.NewTaskService(logger, taskRepo, statRepo, appMetrics)
 
 	wgr.Add(delta)
+
+	go func() {
+		defer wgr.Done()
+		serverPort := 8080
+		server.StartMonitoringServer(ctx, logger, reg, dtb, serverPort, cfg.Userside.BaseURL)
+	}()
 
 	go func() {
 		defer wgr.Done()

@@ -24,7 +24,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		typeName := "Existing Type"
 		expectedID := 1
@@ -49,7 +49,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		typeName := "New Type"
 		expectedID := 2
@@ -82,7 +82,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 		dbError := errors.New("DB error")
 
 		mock.ExpectQuery("SELECT type_id FROM task_types WHERE type_name = \\$1").
@@ -103,7 +103,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 		defer mock.Close()
 
 		typeName := "New Type"
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		// 1. We are expecting a SELECT that will return a "no rows" error.
 		mock.ExpectQuery("SELECT type_id FROM task_types WHERE type_name = \\$1").
@@ -129,7 +129,7 @@ func TestGetOrCreateTaskTypeID(t *testing.T) {
 		defer mock.Close()
 
 		typeName := "New Type"
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		// 1. We are expecting a SELECT that will return a "no rows" error.
 		mock.ExpectQuery("SELECT type_id FROM task_types WHERE type_name = \\$1").
@@ -167,7 +167,7 @@ func TestUpsertTask(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		// 2. Waiting for INSERT
 		mock.ExpectExec("INSERT INTO tasks").
@@ -186,7 +186,7 @@ func TestUpsertTask(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		mock.ExpectExec("INSERT INTO tasks").
 			WithArgs(task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description, task.Address, task.CustomerName, task.CustomerLogin, task.Comments, false).
@@ -213,7 +213,7 @@ func TestUpdateTaskExecutors(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		// 1. Waiting for old artists to be removed
 		mock.ExpectExec("DELETE FROM task_executors WHERE task_id = \\$1").
@@ -240,7 +240,7 @@ func TestUpdateTaskExecutors(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		mock.ExpectExec("DELETE FROM task_executors WHERE task_id = \\$1").
 			WithArgs(taskID).
@@ -266,7 +266,7 @@ func TestUpdateTaskExecutors(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 		dbError := errors.New("failed to delete")
 
 		mock.ExpectExec("DELETE FROM task_executors").
@@ -299,7 +299,7 @@ func TestSaveTaskData(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 
 		// Waiting for GetOrCreateTaskTypeID
 		mock.ExpectQuery("SELECT type_id").WithArgs(task.Type).WillReturnError(pgx.ErrNoRows)
@@ -332,7 +332,7 @@ func TestSaveTaskData(t *testing.T) {
 		require.NoError(t, err)
 		defer mock.Close()
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 		dbError := errors.New("type select failed")
 
 		// We simulate the error on the very first step
@@ -362,7 +362,7 @@ func TestSaveTaskData(t *testing.T) {
 				task.CustomerLogin, task.Comments, false).
 			WillReturnError(assert.AnError)
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 		err = repo.SaveTaskData(ctx, task)
 
 		require.Error(t, err)
@@ -389,7 +389,7 @@ func TestSaveTaskData(t *testing.T) {
 
 		mock.ExpectExec("DELETE FROM task_executors").WithArgs(task.ID).WillReturnError(assert.AnError)
 
-		repo := repository.NewTaskRepository(mock)
+		repo := repository.NewTaskRepository(mock, repoMetrics)
 		err = repo.SaveTaskData(ctx, task)
 
 		require.Error(t, err)

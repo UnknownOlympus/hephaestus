@@ -44,7 +44,7 @@ func TestSaveEmployee_QueryError(t *testing.T) {
 		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnError(assert.AnError)
 
-	repo := repository.NewEmployeeRepository(mock)
+	repo := repository.NewEmployeeRepository(mock, repoMetrics)
 	err = repo.SaveEmployee(
 		t.Context(),
 		expectedID,
@@ -82,7 +82,7 @@ func TestSaveEmployee_Success(t *testing.T) {
 		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
-	repo := repository.NewEmployeeRepository(mock)
+	repo := repository.NewEmployeeRepository(mock, repoMetrics)
 	err = repo.SaveEmployee(
 		t.Context(),
 		expectedID,
@@ -120,7 +120,7 @@ func TestUpdateEmployee_QueryError(t *testing.T) {
 		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnError(assert.AnError)
 
-	repo := repository.NewEmployeeRepository(mock)
+	repo := repository.NewEmployeeRepository(mock, repoMetrics)
 	err = repo.UpdateEmployee(
 		t.Context(),
 		expectedID,
@@ -158,7 +158,7 @@ func TestUpdateEmployee_Success(t *testing.T) {
 		WithArgs(expectedID, expectedFullname, expectedShortName, expectedPosition, expectedEmail, expectedPhone).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
-	repo := repository.NewEmployeeRepository(mock)
+	repo := repository.NewEmployeeRepository(mock, repoMetrics)
 	err = repo.UpdateEmployee(
 		t.Context(),
 		expectedID,
@@ -193,7 +193,7 @@ func TestGetEmployeeByID_QueryError(t *testing.T) {
 		WithArgs(expectedEmployee.ID).
 		WillReturnError(assert.AnError)
 
-	repo := repository.NewEmployeeRepository(mock)
+	repo := repository.NewEmployeeRepository(mock, repoMetrics)
 	actualEmpployee, err := repo.GetEmployeeByID(t.Context(), expectedEmployee.ID)
 
 	require.Error(t, err)
@@ -227,7 +227,7 @@ func TestGetEmployeeByID_Success(t *testing.T) {
 		WithArgs(expEmployee.ID).
 		WillReturnRows(expectedRows)
 
-	repo := repository.NewEmployeeRepository(mock)
+	repo := repository.NewEmployeeRepository(mock, repoMetrics)
 	actualEmpployee, err := repo.GetEmployeeByID(t.Context(), expEmployee.ID)
 
 	require.NoError(t, err)
