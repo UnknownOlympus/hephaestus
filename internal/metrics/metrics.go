@@ -10,12 +10,10 @@ import (
 // a gauge for the last successful run, and a histogram for run duration.
 type Metrics struct {
 	Runs              *prometheus.CounterVec
-	LoginAttempts     *prometheus.CounterVec
 	ItemsParsed       *prometheus.CounterVec
 	LastSuccessfulRun *prometheus.GaugeVec
 	RunDuration       *prometheus.HistogramVec
 	EmailsFixed       prometheus.Counter
-	ParseErrors       *prometheus.CounterVec
 	DBQueryDuration   *prometheus.HistogramVec
 }
 
@@ -35,10 +33,6 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "usprovider_runs_total",
 			Help: "Total times the parser has successfully or unsuccessfully completed its full cycle.",
 		}, []string{"status"}),
-		LoginAttempts: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "usprovider_login_attempts_total",
-			Help: "Total number of login attempts",
-		}, []string{"status"}),
 		ItemsParsed: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "usprovider_items_parsed_total",
 			Help: "Total number of parsed items",
@@ -55,10 +49,6 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "usprovider_emails_fixed_total",
 			Help: "Total number of employee emails that were fixed or generated.",
 		}),
-		ParseErrors: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "usprovider_parse_errors_total",
-			Help: "Total number of errors encountered during HTML parsing.",
-		}, []string{"entity"}), // entity: 'task', 'employee'
 		DBQueryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "usprovider_db_query_duration_seconds",
 			Help:    "Duration of database queries.",
@@ -68,8 +58,6 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 
 	metrics.Runs.WithLabelValues("success")
 	metrics.Runs.WithLabelValues("failure")
-	metrics.LoginAttempts.WithLabelValues("success")
-	metrics.LoginAttempts.WithLabelValues("failure")
 
 	return metrics
 }

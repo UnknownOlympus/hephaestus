@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Houeta/us-api-provider/internal/metrics"
-	"github.com/Houeta/us-api-provider/internal/models"
+	"github.com/UnknownOlympus/hephaestus/internal/metrics"
+	"github.com/UnknownOlympus/hephaestus/internal/models"
 )
 
 type Repository struct {

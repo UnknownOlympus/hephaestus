@@ -11,25 +11,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/UnknownOlympus/hephaestus/internal/metrics"
+	"github.com/UnknownOlympus/hephaestus/internal/models"
+	"github.com/UnknownOlympus/hephaestus/internal/repository"
+	pb "github.com/UnknownOlympus/olympus-protos/gen/go/scraper/olympus"
 	"github.com/tamathecxder/randomail"
-
-	"github.com/Houeta/us-api-provider/internal/auth"
-	"github.com/Houeta/us-api-provider/internal/client"
-	"github.com/Houeta/us-api-provider/internal/metrics"
-	"github.com/Houeta/us-api-provider/internal/models"
-	"github.com/Houeta/us-api-provider/internal/parser"
-	"github.com/Houeta/us-api-provider/internal/repository"
 )
 
 type Staff struct {
-	log     *slog.Logger
-	repo    repository.EmployeeRepoIface
-	parser  parser.EmployeeParserIface
-	metrics *metrics.Metrics
+	log           *slog.Logger
+	repo          repository.EmployeeRepoIface
+	metrics       *metrics.Metrics
+	hermesClient  pb.ScraperServiceClient
+	lastKnownHash string
 }
 
-func NewStaff(log *slog.Logger, repo repository.EmployeeRepoIface, metrics *metrics.Metrics) *Staff {
-	return &Staff{log: log, repo: repo, metrics: metrics}
+func NewStaff(
+	log *slog.Logger,
+	repo repository.EmployeeRepoIface,
+	metrics *metrics.Metrics,
+	hermesClient pb.ScraperServiceClient,
+) *Staff {
+	return &Staff{log: log, repo: repo, metrics: metrics, hermesClient: hermesClient}
 }
 
 func (s *Staff) initLogger(opn string) *slog.Logger {
@@ -41,37 +44,20 @@ func (s *Staff) initLogger(opn string) *slog.Logger {
 
 // Start executes the staff service logic by fetching employees, validating their email addresses,
 // and either updating existing employees or saving new ones to the repository.
-func (s *Staff) Start(ctx context.Context, loginURL, baseURL, username, password string, interval time.Duration) error {
+func (s *Staff) Start(ctx context.Context, interval time.Duration) error {
 	const opn = "Employee.Start"
 	log := s.initLogger(opn)
 
 	var err error
 
-	httpClient := client.CreateHTTPClient(log)
-	s.parser = parser.NewEmployeeParser(httpClient, s.metrics, baseURL)
-
-	// 1. Login
-	log.InfoContext(ctx, "Attempting login...")
-	if err = auth.RetryLogin(ctx, log, httpClient, loginURL, baseURL, username, password); err != nil {
-		s.metrics.LoginAttempts.WithLabelValues("failure").Inc()
-		return fmt.Errorf("failed to login: %w", err)
-	}
-	log.InfoContext(ctx, "Login  successful.")
-	s.metrics.LoginAttempts.WithLabelValues("success").Inc()
-
-	// 2. Catch-up mode
-	log.InfoContext(ctx, "Starting catch-up mode")
-	startTime := time.Now()
+	// 1. Catch-up mode
+	log.InfoContext(ctx, "Starting initial data synchronization")
 	if err = s.ProcessEmployee(ctx); err != nil {
-		s.metrics.Runs.WithLabelValues("failure").Inc()
-		s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
+		log.ErrorContext(ctx, "Initial run failed", "error", err)
 		return fmt.Errorf("failed during catch-up process: %w", err)
 	}
-	s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
-	s.metrics.LastSuccessfulRun.WithLabelValues("employee").SetToCurrentTime()
-	s.metrics.Runs.WithLabelValues("success").Inc()
 
-	// 3. Maintainance mode
+	// 2. Maintainance mode
 	log.InfoContext(ctx, "Starting maintainance mode", "interval", interval.String())
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -80,15 +66,9 @@ func (s *Staff) Start(ctx context.Context, loginURL, baseURL, username, password
 		select {
 		case <-ticker.C:
 			log.InfoContext(ctx, "Periodic check triggered.")
-			startTime = time.Now()
 			if err = s.ProcessEmployee(ctx); err != nil {
-				s.metrics.Runs.WithLabelValues("failure").Inc()
-				s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
 				log.ErrorContext(ctx, "Periodic run failed", "error", err)
 			}
-			s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
-			s.metrics.LastSuccessfulRun.WithLabelValues("employee").SetToCurrentTime()
-			s.metrics.Runs.WithLabelValues("success").Inc()
 		case <-ctx.Done():
 			log.InfoContext(ctx, "Service shutting down.")
 			return nil
@@ -96,23 +76,33 @@ func (s *Staff) Start(ctx context.Context, loginURL, baseURL, username, password
 	}
 }
 
-func (s *Staff) ProcessEmployee(ctx context.Context) error {
-	return s.processEmployeeInternal(ctx, s.parser)
-}
-
-func (s *Staff) processEmployeeInternal(pctx context.Context, employeeParser parser.EmployeeParserIface) error {
+func (s *Staff) ProcessEmployee(pctx context.Context) error {
 	const opn = "Employee.ProcessEmployee"
 	log := s.initLogger(opn)
+	startTime := time.Now()
 
 	contextTimeout := 10
 	ctx, cancel := context.WithTimeout(pctx, time.Duration(contextTimeout)*time.Second)
 	defer cancel()
 
-	employees, err := employeeParser.ParseEmployees(ctx)
+	resp, err := s.hermesClient.GetEmployees(ctx, &pb.GetEmployeesRequest{
+		KnownHash: s.lastKnownHash,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to parse employee from HTML: %w", err)
+		s.metrics.Runs.WithLabelValues("failure").Inc()
+		s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
+		return fmt.Errorf("failed to get employees from Hermes: %w", err)
 	}
 
+	if len(resp.GetEmployees()) == 0 {
+		log.InfoContext(ctx, "No new employee data. Hashes match.", "hash", resp.GetNewHash())
+		s.lastKnownHash = resp.GetNewHash()
+		return nil
+	}
+
+	log.InfoContext(ctx, "New data received from Hermes. Processing...", "employee_count", len(resp.GetEmployees()))
+
+	employees := convertPbToModels(resp.GetEmployees())
 	fixedEmployees := fixInvalidEmail(ctx, log, employees, s.metrics)
 
 	for _, employee := range fixedEmployees {
@@ -142,7 +132,29 @@ func (s *Staff) processEmployeeInternal(pctx context.Context, employeeParser par
 		}
 	}
 
+	s.lastKnownHash = resp.GetNewHash()
+	s.metrics.Runs.WithLabelValues("success").Inc()
+	s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
+	s.metrics.LastSuccessfulRun.WithLabelValues("employee").SetToCurrentTime()
+
+	log.InfoContext(ctx, "Successfully processed and saved employee data.", "new_hash", s.lastKnownHash)
 	return nil
+}
+
+func convertPbToModels(pbEmployees []*pb.Employee) []models.Employee {
+	employees := make([]models.Employee, 0, len(pbEmployees))
+	for _, pbe := range pbEmployees {
+		emp := models.Employee{
+			ID:        int(pbe.GetId()),
+			FullName:  pbe.GetFullname(),
+			ShortName: pbe.GetShortname(),
+			Position:  pbe.GetPosition(),
+			Email:     pbe.GetEmail(),
+			Phone:     pbe.GetPhone(),
+		}
+		employees = append(employees, emp)
+	}
+	return employees
 }
 
 func fixInvalidEmail(

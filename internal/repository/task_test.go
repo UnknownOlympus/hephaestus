@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/Houeta/us-api-provider/internal/models"
-	"github.com/Houeta/us-api-provider/internal/repository"
+	"github.com/UnknownOlympus/hephaestus/internal/models"
+	"github.com/UnknownOlympus/hephaestus/internal/repository"
 	"github.com/jackc/pgx/v5"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/assert"

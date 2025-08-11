@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	models "github.com/Houeta/us-api-provider/internal/models"
+	models "github.com/UnknownOlympus/hephaestus/internal/models"
 	mock "github.com/stretchr/testify/mock"
 )
 

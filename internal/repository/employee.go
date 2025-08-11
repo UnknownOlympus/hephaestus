@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Houeta/us-api-provider/internal/models"
+	"github.com/UnknownOlympus/hephaestus/internal/models"
 )
 
 // SaveEmployee saves an employee to the database. It inserts a new record with the provided details
