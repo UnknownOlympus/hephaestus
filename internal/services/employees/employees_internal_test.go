@@ -1,7 +1,6 @@
 package employees
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -33,7 +32,7 @@ func TestProcessEmployee(t *testing.T) {
 			Employees: []*pb.Employee{},
 		}, nil).Once()
 
-		err := staffService.ProcessEmployee(context.Background())
+		err := staffService.ProcessEmployee(t.Context())
 
 		require.NoError(t, err)
 		mockRepo.AssertNotCalled(t, "GetEmployeeByID")
@@ -54,7 +53,7 @@ func TestProcessEmployee(t *testing.T) {
 			Return(nil).
 			Once()
 
-		err := staffService.ProcessEmployee(context.Background())
+		err := staffService.ProcessEmployee(t.Context())
 
 		require.NoError(t, err)
 		mockRepo.AssertExpectations(t)
@@ -75,7 +74,7 @@ func TestProcessEmployee(t *testing.T) {
 			Return(assert.AnError).
 			Once()
 
-		err := staffService.ProcessEmployee(context.Background())
+		err := staffService.ProcessEmployee(t.Context())
 
 		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to save new employee")
@@ -98,7 +97,7 @@ func TestProcessEmployee(t *testing.T) {
 			Return(nil).
 			Once()
 
-		err := staffService.ProcessEmployee(context.Background())
+		err := staffService.ProcessEmployee(t.Context())
 
 		require.NoError(t, err)
 		mockRepo.AssertExpectations(t)
@@ -120,7 +119,7 @@ func TestProcessEmployee(t *testing.T) {
 			Return(assert.AnError).
 			Once()
 
-		err := staffService.ProcessEmployee(context.Background())
+		err := staffService.ProcessEmployee(t.Context())
 
 		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to update employee")
@@ -138,7 +137,7 @@ func TestProcessEmployee(t *testing.T) {
 		}, nil).Once()
 		mockRepo.On("GetEmployeeByID", mock.Anything, 3).Return(identicalEmployeeModel, nil).Once()
 
-		err := staffService.ProcessEmployee(context.Background())
+		err := staffService.ProcessEmployee(t.Context())
 
 		require.NoError(t, err)
 		mockRepo.AssertNotCalled(t, "SaveEmployee")
@@ -152,7 +151,7 @@ func TestProcessEmployee(t *testing.T) {
 			(*pb.GetEmployeesResponse)(nil), errors.New("gRPC connection failed"),
 		).Once()
 
-		err := staffService.ProcessEmployee(context.Background())
+		err := staffService.ProcessEmployee(t.Context())
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get employees from Hermes")
