@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Houeta/us-api-provider/internal/models"
+	"github.com/UnknownOlympus/hephaestus/internal/models"
 	"github.com/jackc/pgx/v5"
 )
 

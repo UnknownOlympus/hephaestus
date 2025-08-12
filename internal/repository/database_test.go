@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Houeta/us-api-provider/internal/repository"
+	"github.com/UnknownOlympus/hephaestus/internal/repository"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"

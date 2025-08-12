@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Houeta/us-api-provider/internal/metrics"
-	"github.com/Houeta/us-api-provider/internal/repository"
+	"github.com/UnknownOlympus/hephaestus/internal/metrics"
+	"github.com/UnknownOlympus/hephaestus/internal/repository"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"

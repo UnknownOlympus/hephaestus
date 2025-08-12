@@ -1,258 +1,161 @@
 package employees
 
 import (
+	"context"
 	"database/sql"
 	"errors"
-	"io"
 	"log/slog"
+	"os"
 	"testing"
 
-	"github.com/Houeta/us-api-provider/internal/metrics"
-	"github.com/Houeta/us-api-provider/internal/models"
-	mocks "github.com/Houeta/us-api-provider/mock"
+	"github.com/UnknownOlympus/hephaestus/internal/metrics"
+	"github.com/UnknownOlympus/hephaestus/internal/models"
+	mocks "github.com/UnknownOlympus/hephaestus/mock"
+	pb "github.com/UnknownOlympus/olympus-protos/gen/go/scraper/olympus"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-var appMetrics = metrics.NewMetrics(prometheus.DefaultRegisterer) //nolint:gochecknoglobals // for test case
+func TestProcessEmployee(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-func TestProcessEmployeeInternal(t *testing.T) {
-	t.Parallel()
-	// --- Test Cases Setup ---
-	employeeToUpdate := models.Employee{
-		ID:       101,
-		FullName: "John Doe",
-		Position: "Developer",
-		Email:    "john.doe@example.com",
-		Phone:    "+1234567890",
-	}
-	existingEmployeeInDB := models.Employee{
-		ID:       101,
-		FullName: "Johnny Doe",
-		Position: "Old Position",
-		Email:    "old@email.com",
-		Phone:    "+111",
-	}
-	employeeToSkip := models.Employee{
-		ID:       102,
-		FullName: "Jane Smith",
-		Position: "Manager",
-		Email:    "jane.smith@example.com",
-		Phone:    "+0987654321",
-	}
-	employeeToSave := models.Employee{
-		ID:       103,
-		FullName: "Sam Brown",
-		Position: "Designer",
-		Email:    "sam.brown@example.com",
-		Phone:    "+555444333",
-	}
-	parsedEmployees := []models.Employee{employeeToUpdate, employeeToSkip, employeeToSave}
+	mockRepo := mocks.NewEmployeeRepoIface(t)
+	mockHermes := mocks.NewScraperServiceClient(t)
+	reg := prometheus.NewRegistry()
+	testMetrics := metrics.NewMetrics(reg)
+	staffService := NewStaff(logger, mockRepo, testMetrics, mockHermes)
 
-	t.Run("success - update, skip, and save", func(t *testing.T) {
-		t.Parallel()
-		// --- Mocks Setup ---
-		repoMock := new(mocks.EmployeeRepoIface)
-		parserMock := new(mocks.EmployeeParserIface)
-		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock, appMetrics)
-		ctx := t.Context()
+	t.Run("should do nothing when hashes match", func(t *testing.T) {
+		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
+			NewHash:   "new_hash_123",
+			Employees: []*pb.Employee{},
+		}, nil).Once()
 
-		// --- Mock Expectations ---
-		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
+		err := staffService.ProcessEmployee(context.Background())
 
-		repoMock.On("GetEmployeeByID", mock.Anything, employeeToUpdate.ID).Return(existingEmployeeInDB, nil)
-		repoMock.On("UpdateEmployee", mock.Anything, employeeToUpdate.ID, employeeToUpdate.FullName, employeeToUpdate.ShortName,
-			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).
-			Return(nil)
-
-		repoMock.On("GetEmployeeByID", mock.Anything, employeeToSkip.ID).Return(employeeToSkip, nil)
-
-		repoMock.On("GetEmployeeByID", mock.Anything, employeeToSave.ID).Return(models.Employee{}, sql.ErrNoRows)
-		repoMock.On("SaveEmployee", mock.Anything, employeeToSave.ID, employeeToSave.FullName, employeeToSave.ShortName,
-			employeeToSave.Position, employeeToSave.Email, employeeToSave.Phone).Return(nil)
-
-		// --- Execution ---
-		err := staffService.processEmployeeInternal(ctx, parserMock)
-
-		// --- Assertions ---
 		require.NoError(t, err)
-		parserMock.AssertExpectations(t)
-		repoMock.AssertExpectations(t)
+		mockRepo.AssertNotCalled(t, "GetEmployeeByID")
+		mockHermes.AssertExpectations(t)
 	})
 
-	t.Run("failure on parse", func(t *testing.T) {
-		t.Parallel()
-		repoMock := new(mocks.EmployeeRepoIface)
-		parserMock := new(mocks.EmployeeParserIface)
-		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock, appMetrics)
-		ctx := t.Context()
-		parseError := errors.New("failed to parse")
+	t.Run("should save a new employee", func(t *testing.T) {
+		newEmployeePb := &pb.Employee{Id: 1, Fullname: "New Employee", Email: "new@example.com", Phone: "0961234567"}
 
-		parserMock.On("ParseEmployees", mock.Anything).Return(nil, parseError)
+		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
+			NewHash:   "new_hash_456",
+			Employees: []*pb.Employee{newEmployeePb},
+		}, nil).Once()
 
-		err := staffService.processEmployeeInternal(ctx, parserMock)
+		mockRepo.On("GetEmployeeByID", mock.Anything, 1).Return(models.Employee{}, sql.ErrNoRows).Once()
+
+		mockRepo.On("SaveEmployee", mock.Anything, 1, "New Employee", "", "", "new@example.com", "0961234567").
+			Return(nil).
+			Once()
+
+		err := staffService.ProcessEmployee(context.Background())
+
+		require.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+		mockHermes.AssertExpectations(t)
+	})
+
+	t.Run("should return error when failed to save employee", func(t *testing.T) {
+		newEmployeePb := &pb.Employee{Id: 1, Fullname: "New Employee"}
+
+		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
+			NewHash:   "new_hash_456",
+			Employees: []*pb.Employee{newEmployeePb},
+		}, nil).Once()
+
+		mockRepo.On("GetEmployeeByID", mock.Anything, 1).Return(models.Employee{}, sql.ErrNoRows).Once()
+
+		mockRepo.On("SaveEmployee", mock.Anything, 1, "New Employee", "", "", mock.Anything, "").
+			Return(assert.AnError).
+			Once()
+
+		err := staffService.ProcessEmployee(context.Background())
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, parseError)
-		repoMock.AssertNotCalled(t, "GetEmployeeByID", mock.Anything, mock.Anything)
+		require.ErrorContains(t, err, "failed to save new employee")
+		mockRepo.AssertExpectations(t)
+		mockHermes.AssertExpectations(t)
 	})
 
-	t.Run("failure on update", func(t *testing.T) {
-		t.Parallel()
-		repoMock := new(mocks.EmployeeRepoIface)
-		parserMock := new(mocks.EmployeeParserIface)
-		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock, appMetrics)
-		ctx := t.Context()
-		updateError := errors.New("failed to update")
+	t.Run("should update an existing employee", func(t *testing.T) {
+		updatedEmployeePb := &pb.Employee{Id: 2, Fullname: "Updated Name", Email: "updated@example.com"}
+		existingEmployeeModel := models.Employee{ID: 2, FullName: "Old Name", Email: "old@example.com"}
 
-		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
-		repoMock.On("GetEmployeeByID", mock.Anything, employeeToUpdate.ID).Return(existingEmployeeInDB, nil)
-		repoMock.On("UpdateEmployee", mock.Anything, employeeToUpdate.ID, employeeToUpdate.FullName, employeeToUpdate.ShortName,
-			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).
-			Return(updateError)
+		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
+			NewHash:   "new_hash_789",
+			Employees: []*pb.Employee{updatedEmployeePb},
+		}, nil).Once()
 
-		err := staffService.processEmployeeInternal(ctx, parserMock)
+		mockRepo.On("GetEmployeeByID", mock.Anything, 2).Return(existingEmployeeModel, nil).Once()
+
+		mockRepo.On("UpdateEmployee", mock.Anything, 2, "Updated Name", "", "", "updated@example.com", "").
+			Return(nil).
+			Once()
+
+		err := staffService.ProcessEmployee(context.Background())
+
+		require.NoError(t, err)
+		mockRepo.AssertExpectations(t)
+		mockHermes.AssertExpectations(t)
+	})
+
+	t.Run("should return error when failed to update employee", func(t *testing.T) {
+		updatedEmployeePb := &pb.Employee{Id: 2, Fullname: "Updated Name", Email: "12345"}
+		existingEmployeeModel := models.Employee{ID: 2, FullName: "Old Name", Email: "old@example.com"}
+
+		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
+			NewHash:   "new_hash_789",
+			Employees: []*pb.Employee{updatedEmployeePb},
+		}, nil).Once()
+
+		mockRepo.On("GetEmployeeByID", mock.Anything, 2).Return(existingEmployeeModel, nil).Once()
+
+		mockRepo.On("UpdateEmployee", mock.Anything, 2, "Updated Name", "", "", mock.Anything, "").
+			Return(assert.AnError).
+			Once()
+
+		err := staffService.ProcessEmployee(context.Background())
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, updateError)
-		parserMock.AssertExpectations(t)
-		repoMock.AssertExpectations(t)
-		repoMock.AssertNotCalled(t, "SaveEmployee")
+		require.ErrorContains(t, err, "failed to update employee")
+		mockRepo.AssertExpectations(t)
+		mockHermes.AssertExpectations(t)
 	})
 
-	t.Run("failure on save", func(t *testing.T) {
-		t.Parallel()
-		repoMock := new(mocks.EmployeeRepoIface)
-		parserMock := new(mocks.EmployeeParserIface)
-		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-		staffService := NewStaff(logger, repoMock, appMetrics)
-		ctx := t.Context()
-		saveError := errors.New("failed to save")
+	t.Run("should skip an identical existing employee", func(t *testing.T) {
+		identicalEmployeePb := &pb.Employee{Id: 3, Fullname: "Same Name", Email: "same@example.com"}
+		identicalEmployeeModel := models.Employee{ID: 3, FullName: "Same Name", Email: "same@example.com"}
 
-		parserMock.On("ParseEmployees", mock.Anything).Return(parsedEmployees, nil)
-		repoMock.On("GetEmployeeByID", mock.Anything, employeeToUpdate.ID).Return(existingEmployeeInDB, nil)
-		repoMock.On("UpdateEmployee", mock.Anything, employeeToUpdate.ID, employeeToUpdate.FullName, employeeToUpdate.ShortName,
-			employeeToUpdate.Position, employeeToUpdate.Email, employeeToUpdate.Phone).
-			Return(nil)
-		repoMock.On("GetEmployeeByID", mock.Anything, employeeToSkip.ID).Return(employeeToSkip, nil)
-		repoMock.On("GetEmployeeByID", mock.Anything, employeeToSave.ID).Return(models.Employee{}, sql.ErrNoRows)
-		repoMock.On("SaveEmployee", mock.Anything, employeeToSave.ID, employeeToSave.FullName, employeeToSave.ShortName,
-			employeeToSave.Position, employeeToSave.Email, employeeToSave.Phone).Return(saveError)
+		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
+			NewHash:   "new_hash_abc",
+			Employees: []*pb.Employee{identicalEmployeePb},
+		}, nil).Once()
+		mockRepo.On("GetEmployeeByID", mock.Anything, 3).Return(identicalEmployeeModel, nil).Once()
 
-		err := staffService.processEmployeeInternal(ctx, parserMock)
+		err := staffService.ProcessEmployee(context.Background())
+
+		require.NoError(t, err)
+		mockRepo.AssertNotCalled(t, "SaveEmployee")
+		mockRepo.AssertNotCalled(t, "UpdateEmployee")
+		mockRepo.AssertExpectations(t)
+		mockHermes.AssertExpectations(t)
+	})
+
+	t.Run("should return an error if hermes fails", func(t *testing.T) {
+		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(
+			(*pb.GetEmployeesResponse)(nil), errors.New("gRPC connection failed"),
+		).Once()
+
+		err := staffService.ProcessEmployee(context.Background())
 
 		require.Error(t, err)
-		require.ErrorIs(t, err, saveError)
-		parserMock.AssertExpectations(t)
-		repoMock.AssertExpectations(t)
+		assert.Contains(t, err.Error(), "failed to get employees from Hermes")
+		mockRepo.AssertNotCalled(t, "GetEmployeeByID")
 	})
-}
-
-func TestFixInvalidEmail(t *testing.T) {
-	t.Parallel()
-	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	ctx := t.Context()
-
-	t.Run("all emails are valid", func(t *testing.T) {
-		t.Parallel()
-		employeesList := []models.Employee{
-			{FullName: "Valid User", Email: "valid@example.com"},
-		}
-		fixed := fixInvalidEmail(ctx, logger, employeesList, appMetrics)
-		assert.Equal(t, "valid@example.com", fixed[0].Email)
-	})
-
-	t.Run("email is empty", func(t *testing.T) {
-		t.Parallel()
-		employeesList := []models.Employee{
-			{FullName: "Empty Email User", Email: ""},
-		}
-		fixed := fixInvalidEmail(ctx, logger, employeesList, appMetrics)
-		assert.NotEmpty(t, fixed[0].Email)
-		isEmail, _ := ValidateEmployee(fixed[0].Email, "")
-		assert.True(t, isEmail)
-	})
-
-	t.Run("invalid email", func(t *testing.T) {
-		t.Parallel()
-		employeeList := []models.Employee{
-			{FullName: "Invalid User", Email: "invalid.email"},
-		}
-		fixed := fixInvalidEmail(ctx, logger, employeeList, appMetrics)
-		assert.NotEmpty(t, fixed[0].Email)
-		isEmail, _ := ValidateEmployee(fixed[0].Email, "")
-		assert.True(t, isEmail)
-	})
-}
-
-func TestNewStaff(t *testing.T) {
-	t.Parallel()
-	logger := slog.Default()
-	mockRepo := new(mocks.EmployeeRepoIface)
-	s := NewStaff(logger, mockRepo, appMetrics)
-	assert.NotNil(t, s)
-}
-
-func TestIsEmployeeExists(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-
-	t.Run("exists", func(t *testing.T) {
-		t.Parallel()
-		expectedEmployee := models.Employee{ID: 123, FullName: "testuser"}
-		mockRepo := new(mocks.EmployeeRepoIface)
-		mockRepo.On("GetEmployeeByID", ctx, 123).Return(expectedEmployee, nil)
-		ok, employee := IsEmployeeExists(ctx, 123, mockRepo)
-		assert.True(t, ok)
-		assert.Equal(t, expectedEmployee, employee)
-		mockRepo.AssertExpectations(t)
-	})
-
-	t.Run("does not exist", func(t *testing.T) {
-		t.Parallel()
-		mockRepo := new(mocks.EmployeeRepoIface)
-		mockRepo.On("GetEmployeeByID", ctx, 123).Return(models.Employee{}, sql.ErrNoRows)
-		ok, employee := IsEmployeeExists(ctx, 123, mockRepo)
-		assert.False(t, ok)
-		assert.Equal(t, models.Employee{}, employee)
-		mockRepo.AssertExpectations(t)
-	})
-
-	t.Run("sql error", func(t *testing.T) {
-		t.Parallel()
-		mockRepo := new(mocks.EmployeeRepoIface)
-		mockRepo.On("GetEmployeeByID", ctx, 123).Return(models.Employee{}, sql.ErrConnDone)
-		ok, employee := IsEmployeeExists(ctx, 123, mockRepo)
-		assert.False(t, ok)
-		assert.Equal(t, models.Employee{}, employee)
-		mockRepo.AssertExpectations(t)
-	})
-}
-
-func TestValidateEmployee(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		name        string
-		email       string
-		phone       string
-		expectEmail bool
-		expectPhone bool
-	}{
-		{"valid email and phone", "test@example.com", "+1234567890", true, true},
-		{"invalid email, valid phone", "test.com", "123-456-7890", false, true},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			isEmail, isPhone := ValidateEmployee(tc.email, tc.phone)
-			assert.Equal(t, tc.expectEmail, isEmail)
-			assert.Equal(t, tc.expectPhone, isPhone)
-		})
-	}
 }

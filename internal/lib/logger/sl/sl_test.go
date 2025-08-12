@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Houeta/us-api-provider/internal/lib/logger/sl"
+	"github.com/UnknownOlympus/hephaestus/internal/lib/logger/sl"
 	"github.com/stretchr/testify/assert"
 )
 

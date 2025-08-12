@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/grpc"
 )
 
 // StartMonitoringServer starts an HTTP server that provides health check and metrics endpoints.
@@ -27,10 +28,10 @@ func StartMonitoringServer(
 	reg *prometheus.Registry,
 	dtb *pgxpool.Pool,
 	port int,
-	parseHost string,
+	hermesConn *grpc.ClientConn,
 ) {
 	mux := http.NewServeMux()
-	healthChecker := NewHealthChecker(dtb, parseHost, log)
+	healthChecker := NewHealthChecker(log, dtb, hermesConn)
 
 	mux.Handle("/healthz", healthChecker)
 	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))

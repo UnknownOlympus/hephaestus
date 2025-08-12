@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type DBPinger interface {
@@ -13,19 +15,16 @@ type DBPinger interface {
 }
 
 type HealthChecker struct {
-	db         DBPinger
-	parseHost  string
-	httpClient *http.Client
-	log        *slog.Logger
+	db           DBPinger
+	log          *slog.Logger
+	hermesHealth grpc_health_v1.HealthClient
 }
 
-func NewHealthChecker(db DBPinger, parseHost string, log *slog.Logger) *HealthChecker {
-	clientTO := 5
+func NewHealthChecker(log *slog.Logger, db DBPinger, hermesConn *grpc.ClientConn) *HealthChecker {
 	return &HealthChecker{
-		db:         db,
-		parseHost:  parseHost,
-		httpClient: &http.Client{Timeout: time.Duration(clientTO) * time.Second},
-		log:        log,
+		db:           db,
+		log:          log,
+		hermesHealth: grpc_health_v1.NewHealthClient(hermesConn),
 	}
 }
 
@@ -44,37 +43,24 @@ func (h *HealthChecker) ServeHTTP(writer http.ResponseWriter, req *http.Request)
 		status["database"] = "ok"
 	}
 
-	resp, err := h.httpClient.Head(h.parseHost) //nolint:noctx // ctx is overhead for this healthcheck
+	healthReq := &grpc_health_v1.HealthCheckRequest{Service: ""}
+	resp, err := h.hermesHealth.Check(req.Context(), healthReq)
 	switch {
 	case err != nil:
-		status["parser_host"] = "unreachable"
+		status["hermes_service"] = "unreachable"
+		overallStatus = http.StatusServiceUnavailable
+		h.log.WarnContext(req.Context(), "Health check failed: Hermes service unreachable", "error", err)
+	case resp.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING:
+		status["hermes_service"] = "degraded"
 		overallStatus = http.StatusServiceUnavailable
 		h.log.WarnContext(
 			req.Context(),
-			"Health check failed: parser host unreachable",
-			"host",
-			h.parseHost,
-			"error",
-			err,
-		)
-	case resp.StatusCode >= http.StatusBadRequest:
-		status["parser_host"] = "degraded"
-		overallStatus = http.StatusServiceUnavailable
-		h.log.WarnContext(
-			req.Context(),
-			"Health check failed: parser host returned error status",
-			"host",
-			h.parseHost,
-			"status_code",
-			resp.StatusCode,
+			"Health check failed: Hermes service is not serving",
+			"status",
+			resp.GetStatus().String(),
 		)
 	default:
-		status["parser_host"] = "ok"
-	}
-	if resp != nil {
-		if err = resp.Body.Close(); err != nil {
-			h.log.WarnContext(req.Context(), "Failed to close response body", "error", err)
-		}
+		status["hermes_service"] = "ok"
 	}
 
 	writer.Header().Set("Content-Type", "application/json")
