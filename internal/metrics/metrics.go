@@ -30,27 +30,27 @@ type Metrics struct {
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	metrics := &Metrics{
 		Runs: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "usprovider_runs_total",
+			Name: "hephaestus_runs_total",
 			Help: "Total times the parser has successfully or unsuccessfully completed its full cycle.",
 		}, []string{"status"}),
 		ItemsParsed: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "usprovider_items_parsed_total",
+			Name: "hephaestus_items_parsed_total",
 			Help: "Total number of parsed items",
 		}, []string{"type"}),
 		LastSuccessfulRun: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
-			Name: "usprovider_last_successful_run_timestamp",
+			Name: "hephaestus_last_successful_run_timestamp",
 			Help: "Last time when run was successfully",
 		}, []string{"type"}),
 		RunDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name: "usprovider_run_duration_seconds",
+			Name: "hephaestus_run_duration_seconds",
 			Help: "Measures how long it takes for a full parser cycle to complete",
 		}, []string{"type"}),
 		EmailsFixed: promauto.With(reg).NewCounter(prometheus.CounterOpts{
-			Name: "usprovider_emails_fixed_total",
+			Name: "hephaestus_emails_fixed_total",
 			Help: "Total number of employee emails that were fixed or generated.",
 		}),
 		DBQueryDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "usprovider_db_query_duration_seconds",
+			Name:    "hephaestus_db_query_duration_seconds",
 			Help:    "Duration of database queries.",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"query_type"}), // query_type: 'get_employee', 'upsert_task'
