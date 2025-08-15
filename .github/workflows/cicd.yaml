@@ -2,8 +2,10 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "main"]
     tags: ["*"]
+  pull_request: 
+    types: [opened, reopened]
 
 jobs:
   lint:
@@ -42,7 +44,7 @@ jobs:
           go-version: '${{ vars.GOLANG_VERSION }}'
 
       - name: Run tests
-        run: make test-coverage
+        run: make test
 
   build-and-push:
     name: Build and Push Docker Image

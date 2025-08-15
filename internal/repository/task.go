@@ -77,7 +77,6 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 		duration := time.Since(startTime).Seconds()
 		r.metrics.DBQueryDuration.WithLabelValues("upsert_task").Observe(duration)
 	}()
-	isClosed := !task.ClosedAt.IsZero()
 
 	query := `
 		INSERT INTO tasks (
@@ -114,7 +113,7 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 	`
 	_, err := r.db.Exec(ctx, query,
 		task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description,
-		task.Address, task.CustomerName, task.CustomerLogin, task.Comments, isClosed,
+		task.Address, task.CustomerName, task.CustomerLogin, task.Comments, task.IsClosed,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert task error for task '%d': %w", task.ID, err)

@@ -13,4 +13,5 @@ type Task struct {
 	CustomerLogin string    `json:"customerLogin"`
 	Comments      []string  `json:"comments"`
 	Executors     []string  `json:"executors"`
+	IsClosed      bool      `json:"is_closed"`
 }
