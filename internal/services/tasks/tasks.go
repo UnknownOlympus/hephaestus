@@ -217,6 +217,8 @@ func convertPbTasksToModels(pbTasks []*pb.Task) []models.Task {
 			CustomerName:  pbt.GetCustomerName(),
 			CustomerLogin: pbt.GetCustomerLogin(),
 			Comments:      pbt.GetComments(),
+			Executors:     pbt.GetExecutors(),
+			IsClosed:      pbt.GetIsClosed(),
 		}
 		tasks = append(tasks, task)
 	}
