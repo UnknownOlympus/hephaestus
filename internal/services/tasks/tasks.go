@@ -208,17 +208,16 @@ func convertPbTasksToModels(pbTasks []*pb.Task) []models.Task {
 	tasks := make([]models.Task, 0, len(pbTasks))
 	for _, pbt := range pbTasks {
 		task := models.Task{
-			ID:            int(pbt.GetId()),
-			Type:          pbt.GetType(),
-			CreatedAt:     pbt.GetCreationDate().AsTime(),
-			ClosedAt:      pbt.GetClosingDate().AsTime(),
-			Description:   pbt.GetDescription(),
-			Address:       pbt.GetAddress(),
-			CustomerName:  pbt.GetCustomerName(),
-			CustomerLogin: pbt.GetCustomerLogin(),
-			Comments:      pbt.GetComments(),
-			Executors:     pbt.GetExecutors(),
-			IsClosed:      pbt.GetIsClosed(),
+			ID:          int(pbt.GetId()),
+			Type:        pbt.GetType(),
+			CreatedAt:   pbt.GetCreationDate().AsTime(),
+			ClosedAt:    pbt.GetClosingDate().AsTime(),
+			Description: pbt.GetDescription(),
+			Address:     pbt.GetAddress(),
+			Customers:   pbt.GetCustomers(),
+			Comments:    pbt.GetComments(),
+			Executors:   pbt.GetExecutors(),
+			IsClosed:    pbt.GetIsClosed(),
 		}
 		tasks = append(tasks, task)
 	}
