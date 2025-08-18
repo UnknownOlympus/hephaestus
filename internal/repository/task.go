@@ -8,6 +8,8 @@ import (
 
 	"github.com/UnknownOlympus/hephaestus/internal/models"
 	"github.com/jackc/pgx/v5"
+
+	pb "github.com/UnknownOlympus/olympus-protos/gen/go/scraper/olympus"
 )
 
 func (r *Repository) GetOrCreateTaskTypeID(ctx context.Context, typeName string) (int, error) {
@@ -50,6 +52,14 @@ func (r *Repository) SaveTaskData(ctx context.Context, task models.Task) error {
 		duration := time.Since(startTime).Seconds()
 		r.metrics.DBQueryDuration.WithLabelValues("save_tasks_data").Observe(duration)
 	}()
+
+	// 1. Begin transaction
+	trans, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer trans.Rollback(ctx) //nolint:errcheck // omitted because checking for errors will not affect the function
+
 	// 1. Get ID for task type
 	typeID, err := r.GetOrCreateTaskTypeID(ctx, task.Type)
 	if err != nil {
@@ -57,21 +67,33 @@ func (r *Repository) SaveTaskData(ctx context.Context, task models.Task) error {
 	}
 
 	// 2. Insert or update task
-	err = r.UpsertTask(ctx, task, typeID)
+	err = r.UpsertTask(ctx, trans, task, typeID)
 	if err != nil {
 		return fmt.Errorf("task insert/update error: %w", err)
 	}
 
 	// 3. Update executors for the task
-	err = r.UpdateTaskExecutors(ctx, task.ID, task.Executors)
+	err = r.UpdateTaskExecutors(ctx, trans, task.ID, task.Executors)
 	if err != nil {
 		return fmt.Errorf("error updating executors: %w", err)
+	}
+
+	// 4. Save/update info about clients
+	err = r.UpdateTaskCustomers(ctx, trans, task.ID, task.Customers)
+	if err != nil {
+		return fmt.Errorf("error updating customers: %w", err)
+	}
+
+	err = trans.Commit(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
 }
 
-func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID int) error {
+//nolint:varnamelen // tx variable - its a default shortname for database transaction
+func (r *Repository) UpsertTask(ctx context.Context, tx pgx.Tx, task models.Task, typeID int) error {
 	startTime := time.Now()
 	defer func() {
 		duration := time.Since(startTime).Seconds()
@@ -80,16 +102,13 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 
 	query := `
 		INSERT INTO tasks (
-			task_id, task_type_id, creation_date, closing_date, description,
-			address, customer_name, customer_login, comments, is_closed
+			task_id, task_type_id, creation_date, closing_date, description, address, comments, is_closed
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (task_id) DO UPDATE SET
 			task_type_id = EXCLUDED.task_type_id,
 			closing_date = EXCLUDED.closing_date,
 			description = EXCLUDED.description,
-			customer_name = EXCLUDED.customer_name,
-			customer_login = EXCLUDED.customer_login,
 			comments = EXCLUDED.comments,
 			is_closed = EXCLUDED.is_closed,
 			updated_at = CURRENT_TIMESTAMP,
@@ -111,9 +130,9 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 				ELSE tasks.geocoding_error
 			END;
 	`
-	_, err := r.db.Exec(ctx, query,
+	_, err := tx.Exec(ctx, query,
 		task.ID, typeID, task.CreatedAt, task.ClosedAt, task.Description,
-		task.Address, task.CustomerName, task.CustomerLogin, task.Comments, task.IsClosed,
+		task.Address, task.Comments, task.IsClosed,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert task error for task '%d': %w", task.ID, err)
@@ -122,14 +141,15 @@ func (r *Repository) UpsertTask(ctx context.Context, task models.Task, typeID in
 	return nil
 }
 
-func (r *Repository) UpdateTaskExecutors(ctx context.Context, taskID int, executors []string) error {
+//nolint:varnamelen // tx variable - its a default shortname for database transaction
+func (r *Repository) UpdateTaskExecutors(ctx context.Context, tx pgx.Tx, taskID int, executors []string) error {
 	startTime := time.Now()
 	defer func() {
 		duration := time.Since(startTime).Seconds()
 		r.metrics.DBQueryDuration.WithLabelValues("update_task_executors").Observe(duration)
 	}()
 	// 1. Delete all executors for this task
-	_, err := r.db.Exec(ctx, "DELETE FROM task_executors WHERE task_id = $1", taskID)
+	_, err := tx.Exec(ctx, "DELETE FROM task_executors WHERE task_id = $1", taskID)
 	if err != nil {
 		return fmt.Errorf("failed to delete existing executors for the task '%d': %w", taskID, err)
 	}
@@ -141,9 +161,64 @@ func (r *Repository) UpdateTaskExecutors(ctx context.Context, taskID int, execut
 
 	// 2. Insert new executors
 	for _, executorName := range executors {
-		_, err = r.db.Exec(ctx, query, taskID, executorName)
+		_, err = tx.Exec(ctx, query, taskID, executorName)
 		if err != nil {
 			return fmt.Errorf("failed to save link between task '%d' and employee '%s': %w", taskID, executorName, err)
+		}
+	}
+
+	return nil
+}
+
+//nolint:varnamelen // tx variable - its a default shortname for database transaction
+func (r *Repository) UpdateTaskCustomers(ctx context.Context, tx pgx.Tx, taskID int, customers []*pb.Customer) error {
+	customerIDs := make([]int64, 0, len(customers))
+	for _, customer := range customers {
+		var internalID int64
+		if customer.GetId() != 0 {
+			// Case if client has external_id
+			err := tx.QueryRow(ctx, `
+				INSERT INTO customers (external_id, name, login) VALUES ($1, $2, $3)
+				ON CONFLICT (external_id) DO UPDATE SET name = EXCLUDED.name, login = EXCLUDED.login
+				RETURNING id;
+			`, customer.GetId(), customer.GetName(), customer.GetLogin()).Scan(&internalID)
+			if err != nil {
+				return fmt.Errorf("failed to upsert customer with external_id %d: %w", customer.GetId(), err)
+			}
+		} else {
+			// Case if client has not external_id
+			err := tx.QueryRow(ctx, "SELECT id FROM customers WHERE name = $1 AND external_id IS NULL", customer.GetName()).Scan(&internalID)
+			if errors.Is(err, pgx.ErrNoRows) {
+				err = tx.QueryRow(ctx, `
+					INSERT INTO customers (name, login) VALUES ($1, $2) RETURNING id;
+				`, customer.GetName(), customer.GetLogin()).Scan(&internalID)
+			}
+			if err != nil {
+				return fmt.Errorf("failed to get or create customer with name %s: %w", customer.GetName(), err)
+			}
+		}
+		customerIDs = append(customerIDs, internalID)
+	}
+
+	// 2. Clear all chain for this task
+	if _, err := tx.Exec(ctx, "DELETE FROM task_customers WHERE task_id = $1", taskID); err != nil {
+		return fmt.Errorf("failed to delete old links for task %d: %w", taskID, err)
+	}
+
+	// 3. Create new chains
+	if len(customerIDs) > 0 {
+		rows := make([][]interface{}, len(customerIDs))
+		for i, custID := range customerIDs {
+			rows[i] = []interface{}{taskID, custID}
+		}
+		_, err := tx.CopyFrom(
+			ctx,
+			pgx.Identifier{"task_customers"},
+			[]string{"task_id", "customer_id"},
+			pgx.CopyFromRows(rows),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert new links for task %d: %w", taskID, err)
 		}
 	}
 

@@ -6,6 +6,8 @@ import (
 
 	"github.com/UnknownOlympus/hephaestus/internal/metrics"
 	"github.com/UnknownOlympus/hephaestus/internal/models"
+	pb "github.com/UnknownOlympus/olympus-protos/gen/go/scraper/olympus"
+	"github.com/jackc/pgx/v5"
 )
 
 type Repository struct {
@@ -36,8 +38,9 @@ func NewEmployeeRepository(db Database, metrics *metrics.Metrics) EmployeeRepoIf
 // TaskRepoIface represents the interface for interacting with task data in the repository.
 type TaskRepoIface interface {
 	GetOrCreateTaskTypeID(ctx context.Context, typeName string) (int, error)
-	UpsertTask(ctx context.Context, task models.Task, typeID int) error
-	UpdateTaskExecutors(ctx context.Context, taskID int, executors []string) error
+	UpsertTask(ctx context.Context, tx pgx.Tx, task models.Task, typeID int) error
+	UpdateTaskExecutors(ctx context.Context, tx pgx.Tx, taskID int, executors []string) error
+	UpdateTaskCustomers(ctx context.Context, tx pgx.Tx, taskID int, customers []*pb.Customer) error
 	SaveTaskData(ctx context.Context, task models.Task) error
 }
 
