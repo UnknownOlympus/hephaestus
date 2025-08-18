@@ -3,7 +3,7 @@ module github.com/UnknownOlympus/hephaestus
 go 1.24.5
 
 require (
-	github.com/UnknownOlympus/olympus-protos v0.2.0
+	github.com/UnknownOlympus/olympus-protos v0.2.2-0.20250816072407-eb461d5113c4
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/joho/godotenv v1.5.1
 	github.com/pashagolub/pgxmock/v4 v4.8.0
