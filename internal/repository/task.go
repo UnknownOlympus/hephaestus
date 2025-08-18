@@ -156,7 +156,7 @@ func (r *Repository) UpdateTaskExecutors(ctx context.Context, tx pgx.Tx, taskID 
 
 	query := `
 		INSERT INTO task_executors (task_id, executor_id)
-		VALUES ($1, (SELECT id FROM employees WHERE shortname = $2));
+		VALUES ($1, (SELECT id FROM employees WHERE shortname = $2 OR fullname = $2));
 	`
 
 	// 2. Insert new executors

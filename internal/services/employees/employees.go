@@ -96,6 +96,8 @@ func (s *Staff) ProcessEmployee(pctx context.Context) error {
 
 	if len(resp.GetEmployees()) == 0 {
 		log.InfoContext(ctx, "No new employee data. Hashes match.", "hash", resp.GetNewHash())
+		s.metrics.Runs.WithLabelValues("success").Inc()
+		s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
 		s.lastKnownHash = resp.GetNewHash()
 		return nil
 	}
