@@ -11,7 +11,7 @@ type Config struct {
 	Env        string         `json:"env"`            // Env is the current environment: local, dev, prod.
 	Postgres   PostgresConfig `json:"postgres"`       // Postgres holds the database configuration
 	Interval   time.Duration  `json:"interval"`       // Interal is the time after that parser will update info.
-	HermesAddr string         `json:"hermes_address"` //
+	HermesAddr string         `json:"hermes_address"` // HermesAddr is the address to grpc server
 }
 
 // PostgresConfig struct holds the configuration details for connecting to a PostgreSQL database.

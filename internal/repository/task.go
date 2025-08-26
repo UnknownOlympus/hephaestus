@@ -12,6 +12,19 @@ import (
 	pb "github.com/UnknownOlympus/olympus-protos/gen/go/scraper/olympus"
 )
 
+// GetOrCreateTaskTypeID retrieves the ID of a task type by its name.
+// If the task type does not exist, it creates a new entry in the
+// task_types table and returns the newly created ID.
+// It returns an error if the database query fails or if there
+// is an issue inserting the new task type.
+//
+// Parameters:
+//   - ctx: The context for the database operation.
+//   - typeName: The name of the task type to retrieve or create.
+//
+// Returns:
+//   - An integer representing the task type ID.
+//   - An error if the operation fails.
 func (r *Repository) GetOrCreateTaskTypeID(ctx context.Context, typeName string) (int, error) {
 	var typeID int
 	startTime := time.Now()
@@ -46,6 +59,11 @@ func (r *Repository) GetOrCreateTaskTypeID(ctx context.Context, typeName string)
 	return 0, fmt.Errorf("request error to `task_types`: %w", err)
 }
 
+// SaveTaskData saves the task data to the database. It begins a transaction,
+// retrieves or creates the task type ID, inserts or updates the task,
+// updates the executors associated with the task, and updates the customers
+// related to the task. If any operation fails, the transaction is rolled back.
+// The function returns an error if any step in the process fails.
 func (r *Repository) SaveTaskData(ctx context.Context, task models.Task) error {
 	startTime := time.Now()
 	defer func() {

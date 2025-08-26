@@ -20,6 +20,9 @@ type HealthChecker struct {
 	hermesHealth grpc_health_v1.HealthClient
 }
 
+// NewHealthChecker creates a new instance of HealthChecker.
+// It takes a logger, a database pinger, and a gRPC client connection
+// to the Hermes service, and returns a pointer to the HealthChecker.
 func NewHealthChecker(log *slog.Logger, db DBPinger, hermesConn *grpc.ClientConn) *HealthChecker {
 	return &HealthChecker{
 		db:           db,
@@ -28,6 +31,11 @@ func NewHealthChecker(log *slog.Logger, db DBPinger, hermesConn *grpc.ClientConn
 	}
 }
 
+// ServeHTTP handles HTTP requests for health checks. It performs checks on the database
+// and the Hermes service, logging the results and returning a JSON response with the
+// health status of each component. The HTTP status code reflects the overall health
+// status, with 200 OK indicating all services are healthy, and 503 Service Unavailable
+// indicating one or more services are down or degraded.
 func (h *HealthChecker) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	h.log.DebugContext(req.Context(), "Performing health checks...")
 
