@@ -18,6 +18,10 @@ import (
 	"github.com/tamathecxder/randomail"
 )
 
+// Staff represents an employee service that manages employee-related operations.
+// It contains a logger for logging, a repository interface for data access,
+// metrics for performance monitoring, a client for external service communication,
+// and a last known hash for tracking state.
 type Staff struct {
 	log           *slog.Logger
 	repo          repository.EmployeeRepoIface
@@ -26,6 +30,18 @@ type Staff struct {
 	lastKnownHash string
 }
 
+// NewStaff creates a new instance of Staff with the provided logger,
+// employee repository, metrics, and Hermes client.
+//
+// Parameters:
+//   - log: A logger for logging purposes.
+//   - repo: An interface for employee repository operations.
+//   - metrics: A metrics object for tracking performance.
+//   - hermesClient: A client for interacting with the ScraperService.
+//
+// Returns:
+//
+//	A pointer to the newly created Staff instance.
 func NewStaff(
 	log *slog.Logger,
 	repo repository.EmployeeRepoIface,
@@ -76,6 +92,12 @@ func (s *Staff) Start(ctx context.Context, interval time.Duration) error {
 	}
 }
 
+// ProcessEmployee retrieves employee data from the Hermes service, processes the data,
+// and updates the local repository with new or modified employee records. It uses a
+// context with a timeout to ensure that the operation does not run indefinitely.
+// If no new employee data is found, it logs the information and updates the last known hash.
+// In case of errors during the retrieval or processing of employee data, it returns an error
+// with relevant details. Metrics are recorded for success and failure cases.
 func (s *Staff) ProcessEmployee(pctx context.Context) error {
 	const opn = "Employee.ProcessEmployee"
 	log := s.initLogger(opn)
@@ -98,6 +120,7 @@ func (s *Staff) ProcessEmployee(pctx context.Context) error {
 		log.InfoContext(ctx, "No new employee data. Hashes match.", "hash", resp.GetNewHash())
 		s.metrics.Runs.WithLabelValues("success").Inc()
 		s.metrics.RunDuration.WithLabelValues("employee").Observe(float64(time.Since(startTime).Seconds()))
+		s.metrics.LastSuccessfulRun.WithLabelValues("employee").SetToCurrentTime()
 		s.lastKnownHash = resp.GetNewHash()
 		return nil
 	}
@@ -143,6 +166,9 @@ func (s *Staff) ProcessEmployee(pctx context.Context) error {
 	return nil
 }
 
+// convertPbToModels converts a slice of protobuf Employee messages to a slice of models.Employee.
+// It takes a slice of pointers to pb.Employee and returns a slice of models.Employee.
+// Each pb.Employee is transformed into a models.Employee by mapping its fields.
 func convertPbToModels(pbEmployees []*pb.Employee) []models.Employee {
 	employees := make([]models.Employee, 0, len(pbEmployees))
 	for _, pbe := range pbEmployees {
@@ -159,6 +185,18 @@ func convertPbToModels(pbEmployees []*pb.Employee) []models.Employee {
 	return employees
 }
 
+// fixInvalidEmail processes a slice of employees, checking for invalid or missing email addresses.
+// It generates a random email for employees with no email or an invalid email format.
+// The function logs the actions taken and updates the metrics for the number of fixed emails.
+//
+// Parameters:
+// - ctx: The context for logging and cancellation signals.
+// - log: A logger instance for logging debug and info messages.
+// - employees: A slice of Employee models to be processed.
+// - metrics: A metrics instance to track the number of fixed emails.
+//
+// Returns:
+// A slice of Employee models with updated email addresses.
 func fixInvalidEmail(
 	ctx context.Context,
 	log *slog.Logger,

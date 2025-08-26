@@ -27,7 +27,10 @@ const (
 	envProd  = "production"
 )
 
-// main is the entry point of the application.
+// main is the entry point of the application. It initializes the configuration,
+// sets up logging, establishes database connections, and starts the monitoring
+// server and services for employees and tasks. It listens for termination signals
+// to gracefully shut down the application.
 func main() {
 	var err error
 	var wgr sync.WaitGroup

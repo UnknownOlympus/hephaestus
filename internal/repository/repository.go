@@ -15,8 +15,15 @@ type Repository struct {
 	metrics *metrics.Metrics
 }
 
+// StatusRepoIface defines the interface for a status repository.
+// It provides methods to save and retrieve the last processed date.
 type StatusRepoIface interface {
+	// SaveProcessedDate saves the given date as the last processed date.
+	// It returns an error if the operation fails.
 	SaveProcessedDate(ctx context.Context, date time.Time) error
+
+	// GetLastProcessedDate retrieves the last processed date.
+	// It returns the date and an error if the operation fails.
 	GetLastProcessedDate(ctx context.Context) (time.Time, error)
 }
 

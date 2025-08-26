@@ -15,6 +15,10 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// TaskService is responsible for managing tasks within the application.
+// It contains the necessary dependencies such as a logger, repositories for
+// task and status management, a client for interacting with the Hermes service,
+// metrics for monitoring, and a last known hash for state tracking.
 type TaskService struct {
 	log           *slog.Logger
 	repo          repository.TaskRepoIface
@@ -24,6 +28,18 @@ type TaskService struct {
 	lastKnownHash string
 }
 
+// NewTaskService creates a new instance of TaskService with the provided dependencies.
+// It takes a logger, task repository, status repository, metrics, and a Hermes client as parameters.
+//
+// Parameters:
+//   - log: A logger for logging task-related information.
+//   - repo: An interface for task repository operations.
+//   - statusRepo: An interface for status repository operations.
+//   - metrics: A metrics object for tracking performance and usage.
+//   - hermesClient: A client for interacting with the Hermes service.
+//
+// Returns:
+//   - A pointer to the newly created TaskService instance.
 func NewTaskService(log *slog.Logger,
 	repo repository.TaskRepoIface,
 	statusRepo repository.StatusRepoIface,
@@ -40,6 +56,18 @@ func (ts *TaskService) initLogger(opn string) *slog.Logger {
 	)
 }
 
+// Start begins the task service, updating task types and entering a maintenance mode
+// where it periodically processes tasks at the specified interval. It first updates
+// the task types and then enters a catch-up mode to ensure all tasks are current.
+// In maintenance mode, it uses a ticker to trigger periodic checks and processes
+// tasks until the context is done, at which point it gracefully shuts down the service.
+//
+// Parameters:
+//   - ctx: The context for managing cancellation and deadlines.
+//   - interval: The duration between periodic task processing.
+//
+// Returns:
+//   - error: An error if the service fails to start or during processing, otherwise nil.
 func (ts *TaskService) Start(ctx context.Context, interval time.Duration) error {
 	const opn = "Tasks.Start"
 	log := ts.initLogger(opn)
@@ -76,6 +104,13 @@ func (ts *TaskService) Start(ctx context.Context, interval time.Duration) error 
 	}
 }
 
+// catchUpToNow processes tasks until the current date, ensuring that all tasks
+// up to the latest processed date are handled. It retrieves the last processed
+// date and compares it with the current date, processing each date in between
+// until it reaches the current date. The function respects the provided context
+// for cancellation and logs the progress of the catch-up operation.
+// It returns an error if it fails to retrieve the last date or if processing
+// any date fails.
 func (ts *TaskService) catchUpToNow(ctx context.Context) error {
 	const opn = "Tasks.catchUpToNow"
 	log := ts.initLogger(opn)
@@ -126,6 +161,16 @@ func (ts *TaskService) catchUpToNow(ctx context.Context) error {
 	}
 }
 
+// processDate processes the tasks for a given date. It retrieves daily tasks from the Hermes client,
+// saves them to the repository if new tasks are found, and updates the last known hash and the next
+// processed date. It logs the process and metrics for success or failure.
+//
+// Parameters:
+//   - ctx: The context for managing cancellation and deadlines.
+//   - dateToParse: The date for which tasks are to be processed.
+//
+// Returns:
+//   - error: An error if the process fails at any point, otherwise nil.
 func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time,
 ) error {
 	const opn = "Tasks.processDate"
@@ -175,6 +220,9 @@ func (ts *TaskService) processDate(ctx context.Context, dateToParse time.Time,
 	return nil
 }
 
+// GetLastDate retrieves the last processed date from the status repository.
+// If no date is found, it returns a default date of January 1, 2024.
+// In case of other errors, it returns an error indicating the failure reason.
 func (ts *TaskService) GetLastDate(ctx context.Context) (time.Time, error) {
 	lastDate, err := ts.statusRepo.GetLastProcessedDate(ctx)
 	if err != nil {
@@ -188,6 +236,8 @@ func (ts *TaskService) GetLastDate(ctx context.Context) (time.Time, error) {
 	return lastDate, nil
 }
 
+// updateTaskTypes retrieves task types from the Hermes client and saves them to the repository.
+// It returns an error if the retrieval or saving process fails.
 func (ts *TaskService) updateTaskTypes(ctx context.Context) error {
 	resp, err := ts.hermesClient.GetTaskTypes(ctx, &pb.GetTaskTypesRequest{})
 	if err != nil {
@@ -204,6 +254,9 @@ func (ts *TaskService) updateTaskTypes(ctx context.Context) error {
 	return nil
 }
 
+// convertPbTasksToModels converts a slice of protobuf Task objects to a slice of models.Task.
+// It takes a slice of pointers to pb.Task and returns a slice of models.Task.
+// Each pb.Task is mapped to a models.Task by extracting relevant fields.
 func convertPbTasksToModels(pbTasks []*pb.Task) []models.Task {
 	tasks := make([]models.Task, 0, len(pbTasks))
 	for _, pbt := range pbTasks {

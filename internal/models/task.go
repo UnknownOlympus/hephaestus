@@ -6,6 +6,9 @@ import (
 	pb "github.com/UnknownOlympus/olympus-protos/gen/go/scraper/olympus"
 )
 
+// Task represents a task with its details including ID, type, timestamps,
+// description, address, associated customers, comments, executors, and
+// its closed status.
 type Task struct {
 	ID          int            `json:"id"`
 	Type        string         `json:"type"`
