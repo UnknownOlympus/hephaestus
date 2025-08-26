@@ -8,4 +8,5 @@ type Employee struct {
 	Position  string `json:"position"`
 	Email     string `json:"email"`
 	Phone     string `json:"phoneNumber"`
+	IsAdmin   bool   `json:"is_admin"`
 }

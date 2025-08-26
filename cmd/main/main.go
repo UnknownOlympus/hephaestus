@@ -65,7 +65,7 @@ func main() {
 	employeeRepo := repository.NewEmployeeRepository(dtb, appMetrics)
 	taskRepo := repository.NewTaskRepository(dtb, appMetrics)
 	statRepo := repository.NewStatusRepository(dtb, appMetrics)
-	staff := employees.NewStaff(logger, employeeRepo, appMetrics, hermesClient)
+	staff := employees.NewStaff(logger, employeeRepo, appMetrics, hermesClient, cfg.AdminIdentifier)
 	taskService := tasks.NewTaskService(logger, taskRepo, statRepo, appMetrics, hermesClient)
 
 	wgr.Add(delta)

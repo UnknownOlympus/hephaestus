@@ -24,7 +24,7 @@ func TestProcessEmployee(t *testing.T) {
 	mockHermes := mocks.NewScraperServiceClient(t)
 	reg := prometheus.NewRegistry()
 	testMetrics := metrics.NewMetrics(reg)
-	staffService := NewStaff(logger, mockRepo, testMetrics, mockHermes)
+	staffService := NewStaff(logger, mockRepo, testMetrics, mockHermes, "admin")
 
 	t.Run("should do nothing when hashes match", func(t *testing.T) {
 		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
@@ -40,7 +40,13 @@ func TestProcessEmployee(t *testing.T) {
 	})
 
 	t.Run("should save a new employee", func(t *testing.T) {
-		newEmployeePb := &pb.Employee{Id: 1, Fullname: "New Employee", Email: "new@example.com", Phone: "0961234567"}
+		newEmployeePb := &pb.Employee{
+			Id:       1,
+			Fullname: "New Employee",
+			Email:    "new@example.com",
+			Phone:    "0961234567",
+			Position: "admin test",
+		}
 
 		mockHermes.On("GetEmployees", mock.Anything, mock.Anything).Return(&pb.GetEmployeesResponse{
 			NewHash:   "new_hash_456",
@@ -49,7 +55,7 @@ func TestProcessEmployee(t *testing.T) {
 
 		mockRepo.On("GetEmployeeByID", mock.Anything, 1).Return(models.Employee{}, sql.ErrNoRows).Once()
 
-		mockRepo.On("SaveEmployee", mock.Anything, 1, "New Employee", "", "", "new@example.com", "0961234567").
+		mockRepo.On("SaveEmployee", mock.Anything, 1, "New Employee", "", "test", "new@example.com", "0961234567", true).
 			Return(nil).
 			Once()
 
@@ -70,7 +76,7 @@ func TestProcessEmployee(t *testing.T) {
 
 		mockRepo.On("GetEmployeeByID", mock.Anything, 1).Return(models.Employee{}, sql.ErrNoRows).Once()
 
-		mockRepo.On("SaveEmployee", mock.Anything, 1, "New Employee", "", "", mock.Anything, "").
+		mockRepo.On("SaveEmployee", mock.Anything, 1, "New Employee", "", "", mock.Anything, "", false).
 			Return(assert.AnError).
 			Once()
 
@@ -93,7 +99,7 @@ func TestProcessEmployee(t *testing.T) {
 
 		mockRepo.On("GetEmployeeByID", mock.Anything, 2).Return(existingEmployeeModel, nil).Once()
 
-		mockRepo.On("UpdateEmployee", mock.Anything, 2, "Updated Name", "", "", "updated@example.com", "").
+		mockRepo.On("UpdateEmployee", mock.Anything, 2, "Updated Name", "", "", "updated@example.com", "", false).
 			Return(nil).
 			Once()
 
@@ -115,7 +121,7 @@ func TestProcessEmployee(t *testing.T) {
 
 		mockRepo.On("GetEmployeeByID", mock.Anything, 2).Return(existingEmployeeModel, nil).Once()
 
-		mockRepo.On("UpdateEmployee", mock.Anything, 2, "Updated Name", "", "", mock.Anything, "").
+		mockRepo.On("UpdateEmployee", mock.Anything, 2, "Updated Name", "", "", mock.Anything, "", false).
 			Return(assert.AnError).
 			Once()
 
