@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	Env        string         `json:"env"`            // Env is the current environment: local, dev, prod.
-	Postgres   PostgresConfig `json:"postgres"`       // Postgres holds the database configuration
-	Interval   time.Duration  `json:"interval"`       // Interal is the time after that parser will update info.
-	HermesAddr string         `json:"hermes_address"` // HermesAddr is the address to grpc server
+	Env             string         `json:"env"`              // Env is the current environment: local, dev, prod.
+	Postgres        PostgresConfig `json:"postgres"`         // Postgres holds the database configuration
+	Interval        time.Duration  `json:"interval"`         // Interal is the time after that parser will update info.
+	HermesAddr      string         `json:"hermes_address"`   // HermesAddr is the address to grpc server
+	AdminIdentifier string         `json:"admin_identifier"` // Admin identifier its a prefix which identify employee administrators
 }
 
 // PostgresConfig struct holds the configuration details for connecting to a PostgreSQL database.
@@ -41,8 +42,9 @@ func MustLoad() *Config {
 			Password: os.Getenv("DB_PASSWORD"),
 			Dbname:   os.Getenv("DB_NAME"),
 		},
-		Interval:   interval,
-		HermesAddr: os.Getenv("HERMES_ADDRESS"),
+		Interval:        interval,
+		HermesAddr:      os.Getenv("HERMES_ADDRESS"),
+		AdminIdentifier: setDeafultEnv("HEPHAESTUS_ADMIN_IDENTIFIER", "admin"),
 	}
 }
 

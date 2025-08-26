@@ -28,6 +28,7 @@ type Staff struct {
 	metrics       *metrics.Metrics
 	hermesClient  pb.ScraperServiceClient
 	lastKnownHash string
+	adminIdent    string
 }
 
 // NewStaff creates a new instance of Staff with the provided logger,
@@ -47,8 +48,9 @@ func NewStaff(
 	repo repository.EmployeeRepoIface,
 	metrics *metrics.Metrics,
 	hermesClient pb.ScraperServiceClient,
+	adminIdentifier string,
 ) *Staff {
-	return &Staff{log: log, repo: repo, metrics: metrics, hermesClient: hermesClient}
+	return &Staff{log: log, repo: repo, metrics: metrics, hermesClient: hermesClient, adminIdent: adminIdentifier}
 }
 
 func (s *Staff) initLogger(opn string) *slog.Logger {
@@ -131,6 +133,10 @@ func (s *Staff) ProcessEmployee(pctx context.Context) error {
 	fixedEmployees := fixInvalidEmail(ctx, log, employees, s.metrics)
 
 	for _, employee := range fixedEmployees {
+		if strings.Contains(employee.Position, s.adminIdent) {
+			employee.IsAdmin = true
+			employee.Position = strings.TrimSpace(strings.TrimPrefix(employee.Position, s.adminIdent))
+		}
 		existed, existedEmployee := IsEmployeeExists(ctx, employee.ID, s.repo)
 		if existed {
 			if existedEmployee == employee {
@@ -144,13 +150,14 @@ func (s *Staff) ProcessEmployee(pctx context.Context) error {
 				employee.Position,
 				employee.Email,
 				employee.Phone,
+				employee.IsAdmin,
 			)
 			if updateErr != nil {
 				return fmt.Errorf("failed to update employee: '%s': %w", employee.FullName, updateErr)
 			}
 		} else {
 			saveErr := s.repo.SaveEmployee(ctx, employee.ID, employee.FullName, employee.ShortName,
-				employee.Position, employee.Email, employee.Phone)
+				employee.Position, employee.Email, employee.Phone, employee.IsAdmin)
 			if saveErr != nil {
 				return fmt.Errorf("failed to save new employee %s: %w", employee.FullName, saveErr)
 			}

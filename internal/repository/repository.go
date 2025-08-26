@@ -33,8 +33,18 @@ func NewStatusRepository(db Database, metrics *metrics.Metrics) StatusRepoIface 
 
 // EmployeeRepoIface represents the interface for interacting with employee data in the repository.
 type EmployeeRepoIface interface {
-	SaveEmployee(ctx context.Context, identifier int, fullname, shortname, position, email, phone string) error
-	UpdateEmployee(ctx context.Context, identifier int, fullname, shortname, position, email, phone string) error
+	SaveEmployee(
+		ctx context.Context,
+		identifier int,
+		fullname, shortname, position, email, phone string,
+		isAdmin bool,
+	) error
+	UpdateEmployee(
+		ctx context.Context,
+		identifier int,
+		fullname, shortname, position, email, phone string,
+		isAdmin bool,
+	) error
 	GetEmployeeByID(ctx context.Context, identifier int) (models.Employee, error)
 }
 
