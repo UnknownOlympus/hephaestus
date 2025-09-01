@@ -22,7 +22,7 @@ func TestSaveLastProcessesDate_Success(t *testing.T) {
 	query := `
 		INSERT INTO scraper_status (last_processed_date)
 		VALUES ($1)
-		ON CONFLICT (id) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
+		ON CONFLICT (last_processed_date) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
 
 	mock, err := pgxmock.NewPool()
 	if err != nil {
@@ -47,7 +47,7 @@ func TestLastProcessedDate_QueryError(t *testing.T) {
 	query := `
 		INSERT INTO scraper_status (last_processed_date)
 		VALUES ($1)
-		ON CONFLICT (id) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
+		ON CONFLICT (last_processed_date) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
 
 	mock, err := pgxmock.NewPool()
 	if err != nil {

@@ -16,7 +16,7 @@ func (r *Repository) SaveProcessedDate(ctx context.Context, date time.Time) erro
 	query := `
 		INSERT INTO scraper_status (last_processed_date)
 		VALUES ($1)
-		ON CONFLICT (id) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
+		ON CONFLICT (last_processed_date) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
 
 	_, err := r.db.Exec(ctx, query, date)
 	if err != nil {
