@@ -29,6 +29,7 @@ type Staff struct {
 	hermesClient  pb.ScraperServiceClient
 	lastKnownHash string
 	adminIdent    string
+	readyChan     chan struct{}
 }
 
 // NewStaff creates a new instance of Staff with the provided logger,
@@ -50,7 +51,14 @@ func NewStaff(
 	hermesClient pb.ScraperServiceClient,
 	adminIdentifier string,
 ) *Staff {
-	return &Staff{log: log, repo: repo, metrics: metrics, hermesClient: hermesClient, adminIdent: adminIdentifier}
+	return &Staff{
+		log:          log,
+		repo:         repo,
+		metrics:      metrics,
+		hermesClient: hermesClient,
+		adminIdent:   adminIdentifier,
+		readyChan:    make(chan struct{}),
+	}
 }
 
 func (s *Staff) initLogger(opn string) *slog.Logger {
@@ -72,8 +80,13 @@ func (s *Staff) Start(ctx context.Context, interval time.Duration) error {
 	log.InfoContext(ctx, "Starting initial data synchronization")
 	if err = s.ProcessEmployee(ctx); err != nil {
 		log.ErrorContext(ctx, "Initial run failed", "error", err)
+		close(s.readyChan) // Signal completion even on error to prevent deadlock
 		return fmt.Errorf("failed during catch-up process: %w", err)
 	}
+
+	// Signal that initial employee synchronization is complete
+	log.InfoContext(ctx, "Initial employee synchronization completed")
+	close(s.readyChan)
 
 	// 2. Maintainance mode
 	log.InfoContext(ctx, "Starting maintainance mode", "interval", interval.String())
@@ -92,6 +105,13 @@ func (s *Staff) Start(ctx context.Context, interval time.Duration) error {
 			return nil
 		}
 	}
+}
+
+// Ready returns a channel that will be closed when the initial employee
+// synchronization is complete. This allows other services to wait for
+// employees to be loaded before starting their own initialization.
+func (s *Staff) Ready() <-chan struct{} {
+	return s.readyChan
 }
 
 // ProcessEmployee retrieves employee data from the Hermes service, processes the data,
