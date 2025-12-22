@@ -7,6 +7,7 @@ import (
 )
 
 // SaveProcessedDate saves last processed date.
+// The scraper_status table is designed to hold a single row with id=1.
 func (r *Repository) SaveProcessedDate(ctx context.Context, date time.Time) error {
 	startTime := time.Now()
 	defer func() {
@@ -14,9 +15,9 @@ func (r *Repository) SaveProcessedDate(ctx context.Context, date time.Time) erro
 		r.metrics.DBQueryDuration.WithLabelValues("save_processed_date").Observe(duration)
 	}()
 	query := `
-		INSERT INTO scraper_status (last_processed_date)
-		VALUES ($1)
-		ON CONFLICT (last_processed_date) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
+		INSERT INTO scraper_status (id, last_processed_date)
+		VALUES (1, $1)
+		ON CONFLICT (id) DO UPDATE SET last_processed_date = $1, updated_at = CURRENT_TIMESTAMP;`
 
 	_, err := r.db.Exec(ctx, query, date)
 	if err != nil {

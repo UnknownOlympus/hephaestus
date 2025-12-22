@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/UnknownOlympus/hephaestus/internal/client/hermes"
 	"github.com/UnknownOlympus/hephaestus/internal/config"
@@ -35,7 +34,6 @@ func main() {
 	var err error
 	var wgr sync.WaitGroup
 	delta := 3
-	serviceDealyInSeconds := 3
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
@@ -85,11 +83,19 @@ func main() {
 		logger.InfoContext(ctx, "Employee Service stopped.")
 	}()
 
-	time.Sleep(time.Duration(serviceDealyInSeconds) * time.Second)
-
 	go func() {
 		defer wgr.Done()
-		logger.InfoContext(ctx, "Starting Task Service")
+		logger.InfoContext(ctx, "Waiting for Employee Service to complete initial synchronization...")
+
+		// Wait for employee service to complete initial synchronization
+		select {
+		case <-staff.Ready():
+			logger.InfoContext(ctx, "Employee Service ready. Starting Task Service")
+		case <-ctx.Done():
+			logger.InfoContext(ctx, "Shutdown requested before Task Service could start")
+			return
+		}
+
 		if err = taskService.Start(ctx, cfg.Interval); err != nil {
 			logger.ErrorContext(ctx, "Task Service failed", "error", err)
 		}
